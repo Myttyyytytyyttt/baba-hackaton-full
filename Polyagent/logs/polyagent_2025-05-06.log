@@ -11,3 +11,44 @@
 2025-05-06 01:01:34,890 - INFO - Transacción ejecutada exitosamente
 2025-05-06 01:01:34,890 - INFO - Trade executed successfully in new market
 2025-05-06 01:06:45,666 - INFO - Program interrupted by user
+2025-05-06 13:14:33,177 - INFO - Inicializando PolyAgent con monitoreo continuo
+2025-05-06 13:14:34,250 - INFO - Delay de análisis configurado entre 2.0 y 6.0 horas
+2025-05-06 13:14:34,330 - INFO - Iniciando bucle de monitoreo continuo
+2025-05-06 13:14:34,331 - INFO - Starting regular market analysis
+2025-05-06 13:15:14,294 - INFO - Intentando transacción (intento 1/3)
+2025-05-06 13:15:14,938 - INFO - Intentando transacción (intento 2/3)
+2025-05-06 13:15:15,404 - INFO - Intentando transacción (intento 3/3)
+2025-05-06 13:15:23,844 - INFO - Program interrupted by user
+2025-05-06 13:15:58,298 - INFO - Inicializando PolyAgent con monitoreo continuo
+2025-05-06 13:16:00,594 - INFO - Delay de análisis configurado entre 2.0 y 6.0 horas
+2025-05-06 13:16:00,987 - INFO - Iniciando bucle de monitoreo continuo
+2025-05-06 13:16:00,987 - INFO - Starting regular market analysis
+2025-05-06 13:16:36,120 - INFO - Intentando transacción (intento 1/3)
+2025-05-06 13:16:37,274 - INFO - Intentando transacción (intento 2/3)
+2025-05-06 13:16:38,067 - INFO - Intentando transacción (intento 3/3)
+2025-05-06 13:17:04,695 - INFO - Intentando transacción (intento 1/3)
+2025-05-06 13:17:06,328 - INFO - Transacción ejecutada exitosamente
+2025-05-06 13:17:06,328 - INFO - Trade executed successfully in new market
+2025-05-06 13:32:42,956 - INFO - Program interrupted by user
+2025-05-06 20:06:51,105 - INFO - Inicializando PolyAgent con monitoreo continuo
+2025-05-06 20:06:52,077 - INFO - Delay de análisis configurado entre 2.0 y 6.0 horas
+2025-05-06 20:06:52,138 - INFO - Iniciando bucle de monitoreo continuo
+2025-05-06 20:06:52,138 - INFO - Starting regular market analysis
+2025-05-06 20:07:22,675 - INFO - Intentando transacción (intento 1/3)
+2025-05-06 20:07:23,938 - INFO - Intentando transacción (intento 2/3)
+2025-05-06 20:07:24,844 - INFO - Intentando transacción (intento 3/3)
+2025-05-06 20:07:47,056 - INFO - Intentando transacción (intento 1/3)
+2025-05-06 20:07:47,316 - INFO - Intentando transacción (intento 2/3)
+2025-05-06 20:07:47,552 - INFO - Intentando transacción (intento 3/3)
+2025-05-06 20:08:15,407 - INFO - Intentando transacción (intento 1/3)
+2025-05-06 20:08:17,635 - INFO - Transacción ejecutada exitosamente
+2025-05-06 20:08:17,635 - INFO - Trade executed successfully in new market
+2025-05-06 20:37:37,352 - INFO - Program interrupted by user
+2025-05-06 20:37:41,899 - INFO - Inicializando PolyAgent con monitoreo continuo
+2025-05-06 20:37:42,883 - INFO - Delay de análisis configurado entre 2.0 y 6.0 horas
+2025-05-06 20:37:42,939 - INFO - Iniciando bucle de monitoreo continuo
+2025-05-06 20:37:42,939 - INFO - Starting regular market analysis
+2025-05-06 20:38:16,001 - INFO - Intentando transacción (intento 1/3)
+2025-05-06 20:38:17,702 - INFO - Intentando transacción (intento 2/3)
+2025-05-06 20:38:19,025 - INFO - Intentando transacción (intento 3/3)
+2025-05-06 20:38:30,965 - INFO - Program interrupted by user

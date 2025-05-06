@@ -179,9 +179,15 @@ class Trader:
         max_retries = 3
         retry_delay = 60  # segundos
         
+        # Añadir information de position a market_data
+        if not hasattr(market_data, 'trade'):
+            market_data.trade = {}
+        market_data.trade['position'] = position
+        
         for attempt in range(max_retries):
             try:
                 self.logger.info(f"Intentando transacción (intento {attempt + 1}/{max_retries})")
+                print(f"Executing trade for position: {position}")
                 trade = self.polymarket.execute_market_order(market_data, amount)
                 
                 if trade:
@@ -308,10 +314,18 @@ class Trader:
                     best_trade['size'] = amount
                     best_trade['price'] = target_price
                     
+                    # Agregar información del trade a market_data
+                    if not hasattr(market_data, 'trade'):
+                        market_data.trade = {}
+                    market_data.trade.update(best_trade)
+                    
                     print(f"\n{Fore.GREEN}6. TRYING TRADE FOR MARKET {market_data.question}")
                     print(f"   Amount: ${amount} USDC")
                     print(f"   Price: {best_trade['price']}")
                     print(f"   Side: BUY {best_trade.get('position')}{Style.RESET_ALL}")
+                    
+                    # Verificar que la posición está correctamente asignada
+                    print(f"   Verified position in market_data: {market_data.trade.get('position', 'UNKNOWN')}")
 
                     # Store prediction regardless of dry run mode
                     prediction_id = self.prediction_store.store_trade_prediction(
@@ -726,9 +740,46 @@ class Trader:
             self.logger.error(f"Error analyzing single market: {e}")
             print(f"{Fore.RED}Error analyzing single market: {str(e)}{Style.RESET_ALL}")
 
+    async def analyze_all_markets(self):
+        """Versión asíncrona del análisis de mercados"""
+        self.logger.info("Analyzing all markets asynchronously")
+        try:
+            # Versión asíncrona del análisis regular
+            # Por ahora simplemente llama a la versión sincrónica
+            # En el futuro, se puede mejorar para que sea realmente asíncrona
+            print(f"{Fore.YELLOW}Running market analysis...{Style.RESET_ALL}")
+            self.regular_market_analysis()
+            print(f"{Fore.GREEN}Market analysis completed{Style.RESET_ALL}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error in asynchronous market analysis: {e}")
+            print(f"{Fore.RED}Error in async market analysis: {str(e)}{Style.RESET_ALL}")
+            return False
+    
+    async def monitor_events(self):
+        """Monitorea eventos en tiempo real de forma asíncrona"""
+        try:
+            # Verificar si hay nuevos mercados
+            new_markets = self.check_for_new_markets()
+            if new_markets:
+                self.logger.info(f"Found {len(new_markets)} new markets during async monitoring")
+                print(f"{Fore.MAGENTA}Found {len(new_markets)} new markets during async monitoring{Style.RESET_ALL}")
+                
+                # Analizar los nuevos mercados
+                for market in new_markets[:3]:  # Limitar a los 3 más recientes para no sobrecargar
+                    self.analyze_single_market(market)
+                    await asyncio.sleep(2)  # Pequeña pausa asíncrona entre análisis
+            
+            return True
+        except Exception as e:
+            self.logger.error(f"Error monitoring events: {e}")
+            print(f"{Fore.RED}Error monitoring events: {str(e)}{Style.RESET_ALL}")
+            return False
+
     async def monitor_markets(self):
         """Monitorea continuamente los mercados y ejecuta análisis periódicos"""
-        self.logger.info("Iniciando monitoreo continuo de mercados")
+        self.logger.info("Starting continuous market monitoring")
+        print(f"{Fore.CYAN}Starting continuous market monitoring (Windows-compatible async mode){Style.RESET_ALL}")
         
         while True:
             try:
@@ -736,13 +787,13 @@ class Trader:
                 
                 # Verificar si es momento de actualizar la lista de mercados
                 if (current_time - self.last_check_time).total_seconds() >= self.max_trade_delay:
-                    self.logger.info("Actualizando lista de mercados...")
+                    self.logger.info("Updating market list...")
                     self.known_markets = set()  # Reset para obtener todos los mercados
                     self.last_check_time = current_time
                 
                 # Verificar si es momento de análisis periódico
                 if (current_time - self.last_periodic_analysis).total_seconds() >= self.max_trade_delay:
-                    self.logger.info("Iniciando análisis periódico de mercados...")
+                    self.logger.info("Starting periodic market analysis...")
                     await self.analyze_all_markets()
                     self.last_periodic_analysis = current_time
                 
@@ -752,17 +803,50 @@ class Trader:
                 # Aplicar delay solo si no estamos en dry run
                 if not self.dry_run:
                     delay = self.get_random_delay()
-                    self.logger.info(f"Esperando {delay} segundos antes del próximo análisis...")
+                    hours = round(delay / 3600, 1)
+                    self.logger.info(f"Waiting {hours} hours before next analysis...")
+                    print(f"{Fore.BLUE}Waiting {hours} hours before next analysis...{Style.RESET_ALL}")
                     await asyncio.sleep(delay)
                 else:
                     # En dry run, usar un delay más corto
+                    print(f"{Fore.YELLOW}DRY RUN: Using short delay (5 seconds){Style.RESET_ALL}")
                     await asyncio.sleep(5)
                 
             except Exception as e:
-                self.logger.error(f"Error en el monitoreo: {str(e)}")
+                self.logger.error(f"Error in monitoring: {str(e)}")
+                print(f"{Fore.RED}Error in market monitoring: {str(e)}{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}Waiting 60 seconds before retrying...{Style.RESET_ALL}")
                 await asyncio.sleep(60)  # Esperar 1 minuto antes de reintentar
 
 
 if __name__ == "__main__":
-    t = Trader()
-    t.one_best_trade()
+    import platform
+    import asyncio
+    
+    # Configurar el bucle de eventos para Windows
+    if platform.system() == 'Windows':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        print(f"{Fore.CYAN}Windows detected, setting appropriate event loop policy{Style.RESET_ALL}")
+    
+    try:
+        # Crear una instancia del trader
+        trader = Trader()
+        
+        # Si prefieres la versión sincrónica (la original)
+        if os.getenv("USE_ASYNC", "false").lower() != "true":
+            print(f"{Fore.CYAN}Running in synchronous mode{Style.RESET_ALL}")
+            trader.one_best_trade()
+        else:
+            # Versión asincrónica
+            print(f"{Fore.CYAN}Running in asynchronous mode{Style.RESET_ALL}")
+            loop = asyncio.get_event_loop()
+            try:
+                loop.run_until_complete(trader.monitor_markets())
+            except KeyboardInterrupt:
+                print(f"\n{Fore.YELLOW}Program interrupted by user. Shutting down...{Style.RESET_ALL}")
+            finally:
+                loop.close()
+    except Exception as e:
+        print(f"{Fore.RED}Critical error: {str(e)}{Style.RESET_ALL}")
+        import traceback
+        traceback.print_exc()

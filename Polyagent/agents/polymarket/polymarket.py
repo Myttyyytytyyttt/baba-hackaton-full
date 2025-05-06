@@ -490,14 +490,19 @@ class Polymarket:
             # Obtener datos del mercado usando los atributos correctos
             token_ids = ast.literal_eval(market.clob_token_ids)  # Usar el atributo directamente
             
-            # Si el trade dice SELL -> compramos NO
-            # Si el trade dice BUY -> compramos YES
-            if hasattr(market, 'trade') and market.trade.get('side') == "SELL":
+            # Determinar qué token comprar basado en la posición recomendada
+            # El token[0] es NO, token[1] es YES
+            if hasattr(market, 'trade') and market.trade.get('position') == "NO":
                 token_id = token_ids[0]  # Token NO
                 position = "NO"
+                print(f"DEBUG: Selecting NO position (token_id={token_id})")
             else:
                 token_id = token_ids[1]  # Token YES
                 position = "YES"
+                print(f"DEBUG: Selecting YES position (token_id={token_id})")
+            
+            print(f"DEBUG: Market trade data: {market.trade if hasattr(market, 'trade') else 'No trade data'}")
+            print(f"DEBUG: Token IDs available: {token_ids}")
             
             # Verificar si ya tenemos una posición
             current_balance = self.get_token_balance(token_id)
