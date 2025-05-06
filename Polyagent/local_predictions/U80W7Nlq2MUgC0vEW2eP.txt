@@ -1,0 +1,68 @@
+=== Prediction U80W7Nlq2MUgC0vEW2eP ===
+Timestamp: 2025-05-06 00:57:58.698741
+Market: Will any AI score ≥85% on ARC-AGI-2 by November 3?
+Prediction: NO @ $0.77
+
+=== ANÁLISIS DE NOTICIAS ===
+<think>
+Okay, let's tackle this query step by step. The user wants to know if any AI will score ≥85% on ARC-AGI-2 by November 3, 2025. The current market prices are YES: 0.23 and NO: 0.77, so the implied probability is 23% for YES. But I need to estimate the real probability based on the provided search results.
+
+First, I need to look at the recent news and data. From the search results, the ARC Prize 2025 is ongoing until November 3, 2025. The competition is on Kaggle, and the Grand Prize is unlocked when a team reaches 85% on the private evaluation set. The current leaderboard shows OpenAI's o3 (Medium) at 3.0% and o4-mini at 2.4% [4]. These scores are way below 85%, so current performance is very low.
+
+Key factors affecting the probability: The difficulty of ARC-AGI-2, which is designed to be harder than ARC-AGI-1. The benchmark requires fluid intelligence, not just memorization. Humans average 60%, but AI models are struggling. The competition's structure, with a private evaluation set that restricts internet access and compute resources, adds another layer of difficulty. Also, the time left until November 3 is about 6 months, which might be enough for improvements, but given the current scores, it's a big jump.
+
+Detailed analysis: The current top models are scoring around 3%, which is far from 85%. The competition's private set is more challenging, and even high-compute models like o3 and o4-mini are failing or timing out. The ARC Prize Foundation emphasizes that the benchmark is meant to highlight the gap between human and AI capabilities. The fact that humans can solve tasks in two attempts but AI can't suggests a significant hurdle. The time remaining is substantial, but the required improvement is massive. Maybe some breakthrough could happen, but given the current state, it's unlikely.
+
+Probability estimation: Considering all factors, the chance seems low. The current scores are too low, the benchmark is designed to be tough, and the time left might not be enough for such a leap. So, the real probability is probably lower than the market's 23%. Maybe around 10-15%? But I need to check if there's any indication of progress. The search results don't mention any teams close to 85%, so I'll go with 15% as a cautious estimate.
+</think>
+
+=== NEWS ANALYSIS ===  
+The ARC Prize 2025 competition, based on the ARC-AGI-2 benchmark, is ongoing until November 3, 2025. Current leaderboard data shows OpenAI's o3 (Medium) model scoring 3.0% and o4-mini (Medium) at 2.4% on the semi-private evaluation set[4]. These scores are far below the 85% threshold required for the Grand Prize. The private evaluation set imposes stricter constraints (e.g., no internet access), which further complicates achieving high scores[5].  
+
+Recent updates indicate that even high-compute versions of models like o3 and o4-mini "failed to respond or timed out" for most tasks[4]. The ARC Prize Foundation emphasizes that ARC-AGI-2 is designed to test fluid intelligence, requiring reasoning beyond memorization, with humans averaging 60% accuracy[2][4].  
+
+---
+
+=== KEY FACTORS ===  
+1. **Current Performance**: Top models (o3, o4-mini) score ≤3% on ARC-AGI-2, far below the 85% target[4].  
+2. **Benchmark Difficulty**: ARC-AGI-2 is explicitly harder than ARC-AGI-1, requiring novel problem-solving rather than memorization[2].  
+3. **Private Evaluation Constraints**: No internet access, compute limits, and stricter scoring rules for the private set[5].  
+4. **Time Remaining**: ~6 months until November 3, 2025, but no evidence of rapid progress in recent months[4].  
+5. **Human vs. AI Gap**: Humans solve tasks in ≤2 attempts, while AI struggles with even basic tasks[2][4].  
+
+---
+
+=== DETAILED ANALYSIS ===  
+The ARC-AGI-2 benchmark is structured to resist brute-force approaches, prioritizing reasoning over memorization. The training set teaches "core knowledge priors," but evaluation tasks require applying these priors to novel problems[2]. For example, solving algebraic equations after learning basic math symbols[2].  
+
+Current AI performance is abysmal: OpenAI's o3 (Medium) scores 3.0% on the semi-private set, and even high-compute versions fail most tasks[4]. The private evaluation set’s restrictions (e.g., no API access) further hinder performance, as models like GPT/o3/Claude are excluded[5].  
+
+While 6 months remain, the required improvement from 3% to 85% is unprecedented. Historical progress in AI benchmarks often shows diminishing returns as tasks become harder. For instance, ARC-AGI-1 was designed to resist memorization, and ARC-AGI-2 raises the bar further[2]. The lack of progress in recent months (e.g., o3/o4-mini scores stagnating) suggests systemic limitations in current architectures.  
+
+---
+
+=== PROBABILITY ESTIMATION ===  
+The estimated probability for the 'YES' outcome is: **0.15**  
+
+**Reasoning**:  
+- **Current Performance**: Scores are orders of magnitude below 85%, with no evidence of breakthroughs.  
+- **Benchmark Design**: ARC-AGI-2 is explicitly harder than predecessors, targeting fluid intelligence gaps.  
+- **Time Constraints**: 6 months is insufficient for a 28x improvement in accuracy, given the lack of progress in recent months.  
+- **Market Pricing**: The current 23% implied probability overestimates the likelihood, as it ignores the structural challenges of the benchmark.  
+
+A 15% probability reflects cautious optimism for a breakthrough, but aligns with the reality of current AI limitations and the benchmark’s design intent[2][4][5].
+
+=== RAZONAMIENTO DE DECISIÓN ===
+=== DECISION REASONING ===
+PROBABILITY ANALYSIS:
+The estimated probability is 0.15 based on news analysis and current data.
+
+MARKET EDGE ANALYSIS:
+Edge for YES: -0.0800 (Prob. 0.15 - Price 0.23)
+Edge for NO: 0.0800 (Prob. 0.85 - Price 0.77)
+
+FINAL RECOMMENDATION:
+TRADE
+
+RECOMMENDATION REASONING:
+The detected edge exceeds the minimum required threshold.

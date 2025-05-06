@@ -1,0 +1,13 @@
+2025-05-06 00:57:22,927 - INFO - Inicializando PolyAgent con monitoreo continuo
+2025-05-06 00:57:24,106 - INFO - 🔍 Ejecutando en modo DRY RUN - no se ejecutarán transacciones reales
+2025-05-06 00:57:24,163 - INFO - Iniciando bucle de monitoreo continuo
+2025-05-06 00:57:24,163 - INFO - Starting regular market analysis
+2025-05-06 00:58:07,492 - INFO - Program interrupted by user
+2025-05-06 01:00:58,575 - INFO - Inicializando PolyAgent con monitoreo continuo
+2025-05-06 01:00:59,700 - INFO - Delay de análisis configurado entre 2.0 y 6.0 horas
+2025-05-06 01:00:59,758 - INFO - Iniciando bucle de monitoreo continuo
+2025-05-06 01:00:59,758 - INFO - Starting regular market analysis
+2025-05-06 01:01:32,901 - INFO - Intentando transacción (intento 1/3)
+2025-05-06 01:01:34,890 - INFO - Transacción ejecutada exitosamente
+2025-05-06 01:01:34,890 - INFO - Trade executed successfully in new market
+2025-05-06 01:06:45,666 - INFO - Program interrupted by user
