@@ -113,6 +113,7 @@ class PredictionStore:
             with open(file_path, 'w') as f:
                 f.write(f"=== Prediction {prediction_id} ===\n")
                 f.write(f"Timestamp: {prediction_data['timestamp']}\n")
+                f.write(f"Market ID: {prediction_data['market_id']}\n")  # Añadir market_id explícitamente para búsqueda
                 f.write(f"Market: {prediction_data['question']}\n")
                 f.write(f"Prediction: {prediction_data['prediction']} @ ${prediction_data['entry_price']}\n")
                 
@@ -147,4 +148,89 @@ class PredictionStore:
             
         except Exception as e:
             print(f"Error updating prediction: {e}")
+            return False 
+            
+    def has_prediction_for_market(self, market_id) -> bool:
+        """
+        Check if a prediction already exists for the given market ID
+        
+        Args:
+            market_id: The market ID to check
+            
+        Returns:
+            bool: True if a prediction exists, False otherwise
+        """
+        try:
+            # Check Firebase first
+            query = self.db.collection('predictions').where('market_id', '==', market_id).limit(1)
+            docs = query.get()
+            
+            if len(list(docs)) > 0:
+                print(f"{Fore.YELLOW}Market {market_id} already has a prediction stored in Firebase{Style.RESET_ALL}")
+                return True
+                
+            # Check local storage as fallback
+            local_dir = 'local_predictions'
+            if os.path.exists(local_dir):
+                for filename in os.listdir(local_dir):
+                    file_path = os.path.join(local_dir, filename)
+                    if os.path.isfile(file_path):
+                        with open(file_path, 'r') as f:
+                            content = f.read()
+                            # Check if this file contains this market ID
+                            if f"Market ID: {market_id}" in content:
+                                print(f"{Fore.YELLOW}Market {market_id} already has a prediction stored locally{Style.RESET_ALL}")
+                                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"{Fore.RED}Error checking for existing prediction: {e}{Style.RESET_ALL}")
+            # In case of error, assume no prediction exists
+            return False 
+            
+    def clear_all_predictions(self, confirm=False):
+        """
+        Clear all stored predictions - USE WITH CAUTION
+        
+        Args:
+            confirm: Set to True to confirm deletion
+        
+        Returns:
+            bool: True if cleared successfully
+        """
+        if not confirm:
+            print(f"{Fore.RED}CAUTION: You must pass confirm=True to clear all predictions{Style.RESET_ALL}")
+            return False
+            
+        try:
+            # 1. Clear Firebase predictions
+            batch_size = 100
+            docs = self.db.collection('predictions').limit(batch_size).get()
+            deleted = 0
+            
+            while docs:
+                for doc in docs:
+                    doc.reference.delete()
+                    deleted += 1
+                    
+                # Check if we have more to delete
+                docs = self.db.collection('predictions').limit(batch_size).get()
+                if len(list(docs)) == 0:
+                    break
+            
+            # 2. Clear local predictions
+            local_dir = 'local_predictions'
+            if os.path.exists(local_dir):
+                for filename in os.listdir(local_dir):
+                    file_path = os.path.join(local_dir, filename)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        deleted += 1
+            
+            print(f"{Fore.GREEN}Successfully cleared {deleted} prediction records{Style.RESET_ALL}")
+            return True
+            
+        except Exception as e:
+            print(f"{Fore.RED}Error clearing predictions: {e}{Style.RESET_ALL}")
             return False 

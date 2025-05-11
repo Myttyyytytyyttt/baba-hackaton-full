@@ -46,6 +46,7 @@ class SimpleMarket(BaseModel):
     outcomes: Union[str, list]
     outcome_prices: Union[str, list]
     clob_token_ids: Optional[str] = None
+    trade: dict = {}  # Añadir campo trade con un valor por defecto
 
 
 class ClobReward(BaseModel):

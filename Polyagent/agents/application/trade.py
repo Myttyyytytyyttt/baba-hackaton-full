@@ -1,17 +1,20 @@
+import os
+import re
+import ast
+import time
+import json
+import random
+import datetime
+from colorama import Fore, Style, init
+import logging  # Para el sistema de registro
+import asyncio
+import sys
+import platform
 from agents.application.executor import Executor as Agent
 from agents.polymarket.gamma import GammaMarketClient as Gamma
 from agents.polymarket.polymarket import Polymarket
-from colorama import init, Fore, Style
 from agents.predictions.prediction_store import PredictionStore
-import datetime  # Añadido para tracking de tiempo
 import shutil
-import os
-import ast
-import time
-import random  # Añadir al inicio del archivo
-import re
-import logging  # Para el sistema de registro
-import asyncio
 
 init()  # Inicializar colorama
 
@@ -107,14 +110,66 @@ class Trader:
         self.clear_local_dbs()
 
     def clear_local_dbs(self) -> None:
+        """
+        Limpia las bases de datos locales del sistema
+        """
+        print(f"\n{Fore.YELLOW}=== CLEARING LOCAL DATABASES ==={Style.RESET_ALL}")
+        
         try:
-            shutil.rmtree("local_db_events")
-        except:
-            pass
-        try:
-            shutil.rmtree("local_db_markets")
-        except:
-            pass
+            # Eliminar logs antiguos
+            log_dir = "logs"
+            if os.path.exists(log_dir):
+                for f in os.listdir(log_dir):
+                    if f.endswith(".log"):
+                        try:
+                            os.remove(os.path.join(log_dir, f))
+                            print(f"Removed log file: {f}")
+                        except Exception as e:
+                            print(f"Error removing log {f}: {e}")
+            
+            # Eliminar informes antiguos
+            reports_dir = "market_reports"
+            if os.path.exists(reports_dir):
+                for f in os.listdir(reports_dir):
+                    try:
+                        os.remove(os.path.join(reports_dir, f))
+                        print(f"Removed report: {f}")
+                    except Exception as e:
+                        print(f"Error removing report {f}: {e}")
+            
+            # Eliminar informes diarios antiguos
+            daily_dir = "daily_reports"
+            if os.path.exists(daily_dir):
+                for f in os.listdir(daily_dir):
+                    try:
+                        os.remove(os.path.join(daily_dir, f))
+                        print(f"Removed daily report: {f}")
+                    except Exception as e:
+                        print(f"Error removing daily report {f}: {e}")
+            
+            print(f"{Fore.GREEN}Local databases cleaned successfully{Style.RESET_ALL}")
+            
+        except Exception as e:
+            self.logger.error(f"Error cleaning local databases: {e}")
+            print(f"{Fore.RED}Error cleaning local databases: {e}{Style.RESET_ALL}")
+            
+    def clear_predictions(self) -> None:
+        """
+        Limpia todas las predicciones almacenadas (para reiniciar el análisis desde cero)
+        """
+        print(f"\n{Fore.RED}=== WARNING: CLEARING ALL PREDICTIONS ==={Style.RESET_ALL}")
+        print("This will delete all stored predictions from both Firebase and local storage.")
+        
+        confirm = input("Are you sure you want to continue? (type 'yes' to confirm): ").strip().lower()
+        if confirm == 'yes':
+            success = self.prediction_store.clear_all_predictions(confirm=True)
+            if success:
+                print(f"{Fore.GREEN}All predictions have been cleared successfully.{Style.RESET_ALL}")
+                print("The system will now analyze all markets from scratch on the next run.")
+            else:
+                print(f"{Fore.RED}Failed to clear predictions.{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.YELLOW}Operation canceled.{Style.RESET_ALL}")
 
     def one_best_trade(self) -> None:
         """
@@ -272,6 +327,12 @@ class Trader:
         for market_tuple in filtered_markets:
             try:
                 market_data = market_tuple[0]  # SimpleMarket
+                
+                # Skip market if it has already been analyzed and has a prediction
+                if hasattr(market_data, 'id') and market_data.id and self.prediction_store.has_prediction_for_market(market_data.id):
+                    print(f"{Fore.YELLOW}Skipping market {market_data.question} - already analyzed{Style.RESET_ALL}")
+                    continue
+                
                 print(f"\n{Fore.YELLOW}=== Analyzing Market ===")
                 print(f"Market: {market_data.question}")
                 print(f"Current Prices:")
@@ -314,18 +375,11 @@ class Trader:
                     best_trade['size'] = amount
                     best_trade['price'] = target_price
                     
-                    # Agregar información del trade a market_data
-                    if not hasattr(market_data, 'trade'):
-                        market_data.trade = {}
-                    market_data.trade.update(best_trade)
-                    
+                    # No intentemos modificar market_data directamente, sino pasar best_trade como argumento
                     print(f"\n{Fore.GREEN}6. TRYING TRADE FOR MARKET {market_data.question}")
                     print(f"   Amount: ${amount} USDC")
                     print(f"   Price: {best_trade['price']}")
                     print(f"   Side: BUY {best_trade.get('position')}{Style.RESET_ALL}")
-                    
-                    # Verificar que la posición está correctamente asignada
-                    print(f"   Verified position in market_data: {market_data.trade.get('position', 'UNKNOWN')}")
 
                     # Store prediction regardless of dry run mode
                     prediction_id = self.prediction_store.store_trade_prediction(
@@ -345,8 +399,8 @@ class Trader:
                         time.sleep(5)  # Pequeña pausa en dry run
                         continue
 
-                    # Usar el nuevo método execute_trade con reintentos
-                    trade = self.execute_trade(market_data, amount, position)
+                    # Ejecutar trade pasando best_trade como argumento separado
+                    trade = self.polymarket.execute_market_order(market_data, amount)
                     
                     if trade:
                         self.logger.info(f"Trade executed successfully in new market")
@@ -357,7 +411,7 @@ class Trader:
                         time.sleep(random_delay)
                         return  # Salir completamente de la función para respetar el delay
                     else:
-                        print("Trade failed after all retry attempts, trying next market...")
+                        print("Trade failed, trying next market...")
                         time.sleep(5)  # Pequeña pausa entre intentos de trade
                         continue
 
@@ -659,6 +713,11 @@ class Trader:
     def analyze_single_market(self, market_data):
         """Analiza un único mercado nuevo"""
         try:
+            # Skip market if it has already been analyzed and has a prediction
+            if 'id' in market_data and market_data['id'] and self.prediction_store.has_prediction_for_market(market_data['id']):
+                print(f"{Fore.YELLOW}Skipping new market {market_data.get('question', 'Unknown')} - already analyzed{Style.RESET_ALL}")
+                return
+                
             self.logger.info(f"Analyzing new market: {market_data.get('question', 'Unknown')}")
             print(f"\n{Fore.YELLOW}=== Analyzing New Market ===")
             print(f"Market: {market_data.get('question', 'Unknown')}")
@@ -720,6 +779,17 @@ class Trader:
                     best_trade['size'] = amount
                     best_trade['price'] = target_price
                     
+                    # Asegurarnos de que simple_market tiene el atributo trade
+                    try:
+                        if not hasattr(simple_market, 'trade'):
+                            setattr(simple_market, 'trade', {})
+                        simple_market.trade.update(best_trade)
+                    except Exception as e:
+                        self.logger.error(f"Error setting trade attribute: {e}")
+                        print(f"{Fore.RED}Error setting trade attribute: {e}{Style.RESET_ALL}")
+                        # Si hay un error, crear un diccionario trade completamente nuevo
+                        setattr(simple_market, 'trade', best_trade.copy())
+                    
                     # Almacenar predicción
                     prediction_id = self.prediction_store.store_trade_prediction(
                         market_data=simple_market,
@@ -727,6 +797,14 @@ class Trader:
                         analysis=best_trade.get('analysis', '')
                     )
                     
+                    if prediction_id:
+                        print(f"Stored prediction with ID: {prediction_id}")
+                    
+                    # Ejecutar trade solo si no está en modo dry run
+                    if self.dry_run:
+                        print(f"{Fore.YELLOW}DRY RUN: Skipping actual transaction{Style.RESET_ALL}")
+                        return
+                        
                     # Ejecutar trade
                     trade = self.polymarket.execute_market_order(simple_market, amount)
                     if trade:
@@ -820,8 +898,32 @@ class Trader:
 
 
 if __name__ == "__main__":
-    import platform
-    import asyncio
+    # Check for command-line arguments
+    if len(sys.argv) > 1:
+        trader = Trader()
+        
+        # Handle command-line arguments
+        if sys.argv[1] == "--clear-all":
+            # Clear both local DBs and predictions
+            trader.clear_local_dbs()
+            trader.clear_predictions()
+            sys.exit(0)
+        elif sys.argv[1] == "--clear-local-dbs":
+            # Clear only local DB files
+            trader.clear_local_dbs()
+            sys.exit(0)
+        elif sys.argv[1] == "--clear-predictions":
+            # Clear only predictions
+            trader.clear_predictions()
+            sys.exit(0)
+        elif sys.argv[1] == "--help" or sys.argv[1] == "-h":
+            print(f"\n{Fore.CYAN}=== PolyAgent Command Line Options ==={Style.RESET_ALL}")
+            print("--clear-all         : Clear all local files and stored predictions")
+            print("--clear-local-dbs   : Clear only local database files (logs, reports)")
+            print("--clear-predictions : Clear only stored predictions")
+            print("--help, -h          : Show this help message")
+            print(f"{Fore.CYAN}======================================{Style.RESET_ALL}\n")
+            sys.exit(0)
     
     # Configurar el bucle de eventos para Windows
     if platform.system() == 'Windows':
@@ -840,13 +942,8 @@ if __name__ == "__main__":
             # Versión asincrónica
             print(f"{Fore.CYAN}Running in asynchronous mode{Style.RESET_ALL}")
             loop = asyncio.get_event_loop()
-            try:
-                loop.run_until_complete(trader.monitor_markets())
-            except KeyboardInterrupt:
-                print(f"\n{Fore.YELLOW}Program interrupted by user. Shutting down...{Style.RESET_ALL}")
-            finally:
-                loop.close()
+            loop.run_until_complete(trader.monitor_markets())
+    except KeyboardInterrupt:
+        print(f"\n{Fore.YELLOW}Program interrupted by user{Style.RESET_ALL}")
     except Exception as e:
-        print(f"{Fore.RED}Critical error: {str(e)}{Style.RESET_ALL}")
-        import traceback
-        traceback.print_exc()
+        print(f"{Fore.RED}Error: {str(e)}{Style.RESET_ALL}")
