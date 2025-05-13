@@ -4,7 +4,8 @@ export const defaultCharacter: Character = {
     name: "BabaVarga",
     username: "BabaVarga",
     plugins: [TwitterClient],
-    modelProvider: ModelProviderName.OPENAI,
+    modelProvider: ModelProviderName.ANTHROPIC,
+    imageModelProvider: ModelProviderName.OPENAI,
     settings: {
         secrets: {},
         voice: {

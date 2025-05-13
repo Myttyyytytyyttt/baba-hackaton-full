@@ -1,0 +1,64 @@
+=== Prediction 6jBEIMlAuDp27NCrtcyT ===
+Timestamp: 2025-05-13 23:04:42.928363
+Market ID: 537260
+Market: Will "Mission: Impossible – The Final Reckoning" Rotten Tomatoes score be between 90 and 94?
+Prediction: YES @ $0.225
+
+=== ANÁLISIS DE NOTICIAS ===
+<think>
+Okay, let's tackle this market question about the Rotten Tomatoes score for "Mission: Impossible – The Final Reckoning." The user wants to know if the Tomatometer score will be between 90 and 94. The current market prices are YES at 0.225 and NO at 0.775, which suggests the market is leaning towards NO. But I need to analyze this properly.
+
+First, I need to check the search results provided. The first result is from Rotten Tomatoes, giving basic info about the movie: director Christopher McQuarrie, release date May 23, 2025, runtime 2h49m, PG-13 rating. The second result from Rotten Tomatoes' editorial mentions that the movie was originally part of a two-part story but the title was changed from "Dead Reckoning Part 2" to "The Final Reckoning," possibly due to the underperformance of the previous film, "Dead Reckoning," which came out in July 2023. That's a key point because if the previous movie didn't do well, maybe the sequel's expectations are lower, but Tom Cruise's involvement might still carry some weight.
+
+The third search result is a list of upcoming mystery and thriller movies, but it doesn't mention "The Final Reckoning" specifically. The fourth result is from Kalshi, a prediction market, showing that the current odds for the score being above 95 are 50¢ YES and 56¢ NO. But the user's question is about 90-94, which is a different bracket. The fifth result is a general Rotten Tomatoes browse page, not helpful here.
+
+So, the key factors here would be the franchise's history, the director's track record, the previous film's performance, and any early reviews or buzz. Since the movie is set to release on May 23, 2025, and today is May 13, 2025, the release is imminent. However, the search results don't include any early reviews or critic scores yet. The Kalshi market data shows that the market is pricing a 50% chance for above 95, but the user's question is about 90-94. The current market for the user's question is YES at 22.5% and NO at 77.5%, which is a big difference from the Kalshi data. Wait, maybe the Kalshi data is for a different bracket. The user's question is 90-94, while Kalshi's market is for above 95. So those are separate.
+
+Since there are no early reviews yet, the analysis has to rely on historical data. Let's look at the previous Mission: Impossible films. The last one, "Dead Reckoning Part One," had a Tomatometer score. Wait, the second search result mentions that "Dead Reckoning" underperformed at the box office. But what was its Tomatometer score? The user's search results don't include that. However, generally, the Mission: Impossible franchise has high scores. For example, "Fallout" (2018) has 93%, "Rogue Nation" (2015) 93%, "Ghost Protocol" (2011) 93%, "III" (2006) 69%, "II" (2000) 57%, "I" (1996) 68%. So the recent ones have been in the 90s. But "Dead Reckoning Part One" might have a lower score. Wait, the user's search result [2] says that "Dead Reckoning" underperformed, but the exact score isn't provided. If the previous film had a lower score, maybe the sequel's expectations are adjusted.
+
+But the user's question is about the sequel, "The Final Reckoning." Since it's a direct sequel, the story might be more conclusive, which could affect reviews. However, without any early reviews, it's hard to predict. The market is pricing YES at 22.5%, which is quite low. But considering the franchise's history, even if the previous film underperformed, the director (Christopher McQuarrie) has a good track record. The previous films he directed (Fallout, Rogue Nation) had high scores. So maybe the sequel will still get a high score.
+
+But the market is pricing it lower. Why? Maybe because the previous film's underperformance and the title change indicate lower expectations. Also, the Kalshi market for above 95 is 50¢, which is 50% chance. If the user's question is 90-94, that's a lower bracket. If the market expects a 50% chance for above 95, then the chance for 90-94 would be lower. But the user's current market is YES at 22.5%, which is much lower than that. Maybe the market participants are more pessimistic.
+
+Alternatively, the user's market might be considering that the previous film's underperformance could lead to a lower score. But without actual data, it's speculative. The key factors are the director's track record, franchise history, and any early buzz. Since there's no early buzz yet, the analysis has to rely on historical data and the factors mentioned.
+
+Another factor is the runtime: 2h49m. Longer action films can sometimes be criticized for pacing, but Mission: Impossible films are known for their pacing. The PG-13 rating might indicate less intense content, but the genre is action, adventure, mystery & thriller, so it's expected.
+
+In terms of probability estimation, considering the franchise's recent high scores (93% for Fallout, Rogue Nation), but the previous film's underperformance and title change, maybe the score could be slightly lower. If the previous film had a lower score, say 85%, then the sequel might be around 90-92. But without knowing the exact score of the previous film, it's hard. However, the user's market is pricing YES at 22.5%, which is quite low. But given the director's track record, maybe the probability is higher. Alternatively, the market might be overestimating the NO side.
+
+Alternatively, the Kalshi market for above 95 is 50%, so the probability of 95+ is 50%, then 90-94 would be the remaining probability if the score is above 90. But the user's question is 90-94, so if the total probability above 90 is, say, 70%, then 90-94 would be 70% minus the probability above 95. If above 95 is 50%, then 90-94 would be 20%, which aligns with the current market price of 22.5%. But this is speculative.
+
+Alternatively, the market might be considering that the previous film's underperformance could lead to a lower score, hence the lower probability. But without concrete data, it's hard to say. Given that the franchise has a history of high scores, but the previous film's underperformance, the probability might be around 20-25%, which matches the current market price. However, considering the director's track record, maybe it's higher. But the market is pricing it at 22.5%, so maybe that's the correct estimate.
+
+In conclusion, the estimated probability for YES (90-94) is around 0.225, aligning with the current market price, considering the factors mentioned.
+</think>
+
+=== NEWS ANALYSIS ===  
+**Mission: Impossible – The Final Reckoning** is scheduled for release on May 23, 2025, as a direct sequel to *Dead Reckoning* (2023), which underperformed at the box office[2]. The title was changed from *Dead Reckoning Part 2* to avoid associating it with the previous film’s mixed reception[2]. Directed by Christopher McQuarrie, the film retains Tom Cruise in the lead role and continues the franchise’s signature high-stakes action[1][2]. No early reviews or critic scores are available yet, as the release is imminent (May 23, 2025)[1][2].  
+
+=== KEY FACTORS ===  
+1. **Franchise History**: Recent *Mission: Impossible* films (*Fallout*, *Rogue Nation*) scored 93% on Rotten Tomatoes, but *Dead Reckoning* (2023) faced box office challenges[2].  
+2. **Director’s Track Record**: McQuarrie has consistently delivered high scores in the franchise, but the sequel’s narrative continuity may influence critical reception[1][2].  
+3. **Market Sentiment**: Prediction markets (e.g., Kalshi) price a 50% chance for a Tomatometer score above 95, suggesting cautious optimism[4].  
+4. **Title Change**: The shift from *Dead Reckoning Part 2* to *The Final Reckoning* may signal a rebranding effort to attract audiences wary of sequels[2].  
+
+=== DETAILED ANALYSIS ===  
+The franchise’s recent success (93% for *Fallout* and *Rogue Nation*) suggests a baseline for high scores, but *Dead Reckoning*’s underperformance introduces uncertainty[2]. McQuarrie’s direction has historically elevated the series, but the sequel’s narrative burden (resolving a cliffhanger) could lead to mixed reviews if pacing or plot complexity falters[1][2]. The lack of early reviews makes this speculative, but the market’s current pricing (YES: 22.5%, NO: 77.5%) reflects skepticism about a score in the 90–94 range, possibly due to concerns about franchise fatigue or the previous film’s reception[4].  
+
+=== PROBABILITY ESTIMATION ===  
+The estimated probability for the 'YES' outcome (90–94 Tomatometer score) is **0.225**. This aligns with the current market price, reflecting cautious expectations given the franchise’s history, director’s reliability, and the unresolved impact of *Dead Reckoning*’s performance[2][4].
+
+=== RAZONAMIENTO DE DECISIÓN ===
+=== DECISION REASONING ===
+PROBABILITY ANALYSIS:
+The estimated probability is 0.90 based on news analysis and current data.
+
+MARKET EDGE ANALYSIS:
+Edge for YES: 0.6750 (Prob. 0.90 - Price 0.23)
+Edge for NO: -0.6750 (Prob. 0.10 - Price 0.78)
+
+FINAL RECOMMENDATION:
+TRADE
+
+RECOMMENDATION REASONING:
+The detected edge exceeds the minimum required threshold.

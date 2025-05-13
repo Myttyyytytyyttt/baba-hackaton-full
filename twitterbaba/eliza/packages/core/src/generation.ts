@@ -831,7 +831,7 @@ export async function generateText({
                     "Initializing Groq model with Cloudflare check"
                 );
                 const baseURL = getCloudflareGatewayBaseURL(runtime, "groq");
-                elizaLogger.debug("Groq baseURL result:", { baseURL });
+                elizaLogger.debug("Groq handleGroq baseURL:", { baseURL });
                 const groq = createGroq({
                     apiKey,
                     fetch: runtime.fetch,
@@ -1750,6 +1750,7 @@ export const generateImage = async (
         hideWatermark?: boolean;
         safeMode?: boolean;
         cfgScale?: number;
+        styleId?: string; // Nuevo parámetro para el estilo
     },
     runtime: IAgentRuntime
 ): Promise<{
@@ -1767,7 +1768,62 @@ export const generateImage = async (
     const model = modelSettings.name;
     elizaLogger.info("Generating image with options:", {
         imageModelProvider: model,
+        styleId: data.styleId,
     });
+
+    // Si hay un styleId, obtener el estilo del cliente de Twitter
+    // NOTA: Esto asume que el cliente tiene definidos los estilos en el archivo post.ts
+    // Como solución temporal, duplicamos los estilos aquí para no crear dependencias circulares
+    let stylePrompt = "";
+    if (data.styleId) {
+        const IMAGE_STYLES: Record<string, {name: string, prompt: string}> = {
+            ANIME_JAPAN: {
+                name: "Japan Anime Style",
+                prompt: "Japan anime style, bold lines, big expressive eyes, soft lighting, dreamy vibes"
+            },
+            CYBERPUNK: {
+                name: "Cyberpunk",
+                prompt: "Cyberpunk style with glowing neon lights, dark tones, purples, blues, electric glow, futuristic"
+            },
+            GHIBLI: {
+                name: "Ghibli Style",
+                prompt: "Ghibli style, painterly anime look, soft watercolor textures, lush natural environments, emotionally expressive characters with large eyes, subtle magical realism, nostalgic atmosphere, warm lighting, gentle brushwork"
+            },
+            PIXAR: {
+                name: "Pixar 3D Style",
+                prompt: "Pixar 3D style, charming animated style, clean stylized character designs with expressive yet subtle facial animation, cinematic warm lighting, beautifully composed shots, high-quality polished textures, and a heartwarming tone"
+            },
+            FLEISCHER: {
+                name: "Fleischer Studios Style",
+                prompt: "1930s rubber-hose cartoon style, surreal, bouncy physics, jazz-age character design, pie-cut eyes, looping animation feel, hand-inked outlines, vintage backgrounds with film grain texture"
+            },
+            RICK_AND_MORTY: {
+                name: "Rick and Morty Style",
+                prompt: "Rick and Morty style, surreal sci-fi cartoon style, flat 2D with wobbly outlines, exaggerated facial expressions, grotesque humor, absurd proportions, chaotic alien worlds, dimensional portals, and a muted palette lit with electric pops of color"
+            },
+            PIXEL_ART: {
+                name: "Retro Pixel Game Style",
+                prompt: "Authentic low-resolution pixel art, retro 8-bit or 16-bit video game style, clean blocky pixel style with no pixel borders, limited color palette with visible dithering and sharp contrast, classic NES or SNES games aesthetic, crisp sprite-like rendering"
+            },
+            MARBLE: {
+                name: "Marble Style",
+                prompt: "Hyper-realistic marble sculpture, all-white polished marble with glossy finish, reflecting soft ambient light, deep shadows and highlights for sculptural depth, smooth and finely detailed texture resembling polished Carrara marble, high-relief marble carving, classical Greco-Roman aesthetic, dramatic lighting to define contours"
+            },
+            LEGO: {
+                name: "Lego Style",
+                prompt: "Lego style, made entirely of plastic bricks, blocky shapes, visible stud textures, modular construction, bright primary colors, characters with iconic Lego faces and claw hands, 3D toy-like rendering"
+            }
+        };
+        
+        const style = IMAGE_STYLES[data.styleId];
+        if (style) {
+            stylePrompt = style.prompt + ", ";
+            elizaLogger.info(`Applying style: ${style.name}`);
+        }
+    }
+
+    // Combinar el prompt de estilo con el prompt original
+    const fullPrompt = data.styleId ? `${stylePrompt}${data.prompt}` : data.prompt;
 
     const apiKey =
         runtime.imageModelProvider === runtime.modelProvider
@@ -1835,7 +1891,7 @@ export const generateImage = async (
                         job_id: data.jobId || crypto.randomUUID(),
                         model_input: {
                             SD: {
-                                prompt: data.prompt,
+                                prompt: fullPrompt,
                                 neg_prompt: data.negativePrompt,
                                 num_iterations: data.numIterations || 20,
                                 width: data.width || 512,
@@ -1867,7 +1923,7 @@ export const generateImage = async (
             const together = new Together({ apiKey: apiKey as string });
             const response = await together.images.create({
                 model: model,
-                prompt: data.prompt,
+                prompt: fullPrompt,
                 width: data.width,
                 height: data.height,
                 steps: modelSettings?.steps ?? 4,
@@ -1924,7 +1980,7 @@ export const generateImage = async (
 
             // Prepare the input parameters according to their schema
             const input = {
-                prompt: data.prompt,
+                prompt: fullPrompt,
                 image_size: "square" as const,
                 num_inference_steps: modelSettings?.steps ?? 50,
                 guidance_scale: data.guidanceScale || 3.5,
@@ -1981,7 +2037,7 @@ export const generateImage = async (
                     },
                     body: JSON.stringify({
                         model: model,
-                        prompt: data.prompt,
+                        prompt: fullPrompt,
                         cfg_scale: data.guidanceScale,
                         negative_prompt: data.negativePrompt,
                         width: data.width,
@@ -2024,7 +2080,7 @@ export const generateImage = async (
                     },
                     body: JSON.stringify({
                         model: model,
-                        prompt: data.prompt,
+                        prompt: fullPrompt,
                         negative_prompt: data.negativePrompt,
                         width: data.width,
                         height: data.height,
@@ -2071,7 +2127,7 @@ export const generateImage = async (
                         body: JSON.stringify({
                             model_id:
                                 data.modelId || "ByteDance/SDXL-Lightning",
-                            prompt: data.prompt,
+                            prompt: fullPrompt,
                             width: data.width || 1024,
                             height: data.height || 1024,
                         }),
@@ -2129,7 +2185,7 @@ export const generateImage = async (
             });
             const response = await openai.images.generate({
                 model,
-                prompt: data.prompt,
+                prompt: fullPrompt,
                 size: targetSize as "1024x1024" | "1792x1024" | "1024x1792",
                 n: data.count,
                 response_format: "b64_json",

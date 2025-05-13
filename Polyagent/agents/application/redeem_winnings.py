@@ -13,6 +13,7 @@ import logging
 import random  # Para seleccionar mercados aleatorios en modo prueba
 import firebase_admin
 from firebase_admin import credentials, firestore
+import backoff  # Para implementar reintentos con backoff
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -96,39 +97,145 @@ class PolymarketRedeemer:
             logger.error(f"Failed to initialize Firebase: {str(e)}")
             logger.warning("Will use local predictions only")
     
+    # Función para manejar errores de backoff
+    def on_backoff(self, details):
+        """Función que se llama cuando ocurre un backoff"""
+        logger.warning(f"Backing off {details['wait']:0.1f} seconds after {details['tries']} tries. Error: {details['exception']}")
+
+    # Función para determinar si un error es recuperable
+    def is_recoverable_error(self, exception):
+        """Determina si un error es recuperable para reintento"""
+        # Errores de conexión, timeout, etc.
+        if isinstance(exception, (requests.exceptions.ConnectionError, 
+                                 requests.exceptions.Timeout,
+                                 requests.exceptions.ChunkedEncodingError,
+                                 ConnectionResetError)):
+            return True
+        # Errores HTTP 5xx (problemas del servidor) y 429 (rate limiting)
+        if isinstance(exception, requests.exceptions.HTTPError):
+            return 500 <= exception.response.status_code < 600 or exception.response.status_code == 429
+        return False
+
+    def _fetch_markets_page(self, archived=False):
+        """Función interna para obtener una página de mercados con reintentos"""
+        # Implementar backoff dentro de la función en lugar de usar decorador
+        @backoff.on_exception(backoff.expo, 
+                            (requests.exceptions.RequestException, ConnectionError),
+                            max_tries=5,
+                            on_backoff=self.on_backoff,
+                            giveup=lambda e: not self.is_recoverable_error(e))
+        def _fetch_with_retry():
+            params = {
+                "limit": "1000",
+                "archived": str(archived).lower()
+            }
+            
+            headers = {
+                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                "Referer": "https://polymarket.com/",
+                "Origin": "https://polymarket.com"
+            }
+            
+            # Añadir un pequeño retraso aleatorio para evitar rate limiting
+            time.sleep(random.uniform(0.5, 2.0))
+            
+            response = requests.get(
+                f"{self.gamma_api_url}/markets",
+                params=params,
+                headers=headers,
+                timeout=30  # Aumentar timeout para dar más tiempo al servidor
+            )
+            
+            response.raise_for_status()  # Lanzar excepción si hay error HTTP
+            return response.json()
+        
+        # Llamar a la función interna con reintentos
+        return _fetch_with_retry()
+
     def get_all_markets(self) -> List[Dict[str, Any]]:
-        """Obtener todos los mercados disponibles desde la API de Gamma"""
+        """Obtener todos los mercados disponibles desde la API de Gamma con manejo de errores mejorado"""
+        markets = []
         try:
-            markets = []
             # Obtener tanto mercados activos como archivados
             for archived in [False, True]:
-                params = {
-                    "limit": "1000",
-                    "archived": str(archived).lower()
-                }
-                
-                headers = {
-                    "Accept": "application/json",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-                }
-                
-                response = requests.get(
-                    f"{self.gamma_api_url}/markets",
-                    params=params,
-                    headers=headers
-                )
-                
-                if response.status_code == 200:
-                    batch = response.json()
+                try:
+                    batch = self._fetch_markets_page(archived)
                     markets.extend(batch)
                     logger.info(f"Retrieved {len(batch)} {'archived' if archived else 'active'} markets")
-                else:
-                    logger.error(f"Error fetching {'archived' if archived else 'active'} markets: {response.status_code} - {response.text}")
+                except Exception as e:
+                    logger.error(f"Error fetching {'archived' if archived else 'active'} markets: {str(e)}")
+                    # Continuar con el siguiente tipo aunque uno falle
             
             logger.info(f"Total markets retrieved: {len(markets)}")
+            
+            # Si estamos en modo debug, intentar recuperar mercados específicos de nuestros trades
+            if self.debug_mode and len(markets) > 0:
+                # Obtener los IDs de mercados del usuario
+                user_trades = self.get_all_user_trades()
+                user_market_ids = [str(trade.get('market_id')) for trade in user_trades if trade.get('market_id')]
+                
+                logger.info(f"Attempting to fetch specific markets by ID: {user_market_ids[:5]}...")
+                
+                # Intentar recuperar mercados específicos por ID
+                specific_markets = []
+                for market_id in user_market_ids:
+                    try:
+                        # Intentar obtener información detallada del mercado
+                        market_url = f"{self.gamma_api_url}/markets/{market_id}"
+                        headers = {
+                            "Accept": "application/json",
+                            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+                        }
+                        
+                        # Evitar rate limiting
+                        time.sleep(random.uniform(0.5, 1.0))
+                        
+                        response = requests.get(market_url, headers=headers, timeout=10)
+                        if response.status_code == 200:
+                            market_data = response.json()
+                            specific_markets.append(market_data)
+                            logger.info(f"Successfully retrieved market ID {market_id}: {market_data.get('question', 'Unknown')}")
+                    except Exception as e:
+                        logger.error(f"Error fetching specific market ID {market_id}: {str(e)}")
+                
+                # Añadir los mercados específicos a los ya recopilados
+                if specific_markets:
+                    logger.info(f"Added {len(specific_markets)} specific markets from user trades")
+                    markets.extend(specific_markets)
+            
+            # Si no se obtuvieron mercados y estamos en modo debug, hacer una prueba simple
+            if not markets and self.debug_mode:
+                logger.info("Testing connection to Polymarket API...")
+                try:
+                    test_response = requests.get(
+                        "https://gamma-api.polymarket.com/",
+                        timeout=10,
+                        headers={"User-Agent": "Mozilla/5.0"}
+                    )
+                    logger.info(f"API base endpoint response: {test_response.status_code}")
+                except Exception as test_e:
+                    logger.error(f"Cannot connect to Polymarket API: {test_e}")
+            
             return markets
+            
         except Exception as e:
             logger.error(f"Error getting markets: {e}")
+            # En caso de error, intentar obtener al menos algunos mercados recientes
+            try:
+                logger.info("Attempting to fetch trending markets as fallback...")
+                trending_url = f"{self.gamma_api_url}/markets?limit=50&trending=true"
+                response = requests.get(
+                    trending_url,
+                    headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
+                    timeout=20
+                )
+                if response.status_code == 200:
+                    trending_markets = response.json()
+                    logger.info(f"Retrieved {len(trending_markets)} trending markets as fallback")
+                    return trending_markets
+            except Exception as fallback_e:
+                logger.error(f"Fallback retrieval also failed: {fallback_e}")
             return []
     
     def get_user_trades_from_firebase(self) -> List[Dict[str, Any]]:
@@ -281,6 +388,9 @@ class PolymarketRedeemer:
         # Crear un mapa de IDs de mercado
         user_market_ids = {str(trade.get('market_id')): trade for trade in user_trades}
         
+        if self.debug_mode:
+            logger.info(f"User market IDs: {list(user_market_ids.keys())[:5]}...")
+        
         # Obtener todos los mercados resueltos
         resolved_markets = self.get_resolved_markets()
         
@@ -288,12 +398,82 @@ class PolymarketRedeemer:
         user_resolved_markets = []
         for market in resolved_markets:
             market_id = str(market.get('id'))
+            market_question = market.get('question', 'Unknown')
+            
+            # Intentar varias formas de ID
+            matched = False
+            
+            # Forma 1: Comparación directa
             if market_id in user_market_ids:
-                # Añadir la predicción del usuario al mercado
+                matched = True
                 market['user_prediction'] = user_market_ids[market_id].get('prediction', 'UNKNOWN')
                 user_resolved_markets.append(market)
+                if self.debug_mode:
+                    logger.info(f"Matched market ID: {market_id} - {market_question}")
+                continue
+                
+            # Forma 2: Buscar si el ID está en otro formato (sin ceros a la izquierda)
+            try:
+                if market_id.isdigit():
+                    cleaned_id = str(int(market_id))  # Eliminar ceros a la izquierda
+                    if cleaned_id in user_market_ids:
+                        matched = True
+                        market['user_prediction'] = user_market_ids[cleaned_id].get('prediction', 'UNKNOWN')
+                        user_resolved_markets.append(market)
+                        if self.debug_mode:
+                            logger.info(f"Matched cleaned market ID: {cleaned_id} (original: {market_id}) - {market_question}")
+                        continue
+            except Exception as e:
+                if self.debug_mode:
+                    logger.error(f"Error processing market ID {market_id}: {e}")
+            
+            # Forma 3: Verificar si hay algún ID alternativo en el mercado
+            alt_ids = []
+            for key in ['questionID', 'questionId', 'marketId', 'market_id']:
+                if key in market and market[key]:
+                    alt_id = str(market[key])
+                    alt_ids.append(alt_id)
+                    if alt_id in user_market_ids:
+                        matched = True
+                        market['user_prediction'] = user_market_ids[alt_id].get('prediction', 'UNKNOWN')
+                        user_resolved_markets.append(market)
+                        if self.debug_mode:
+                            logger.info(f"Matched alternate ID {key}: {alt_id} - {market_question}")
+                        break
+            
+            # En modo debug, mostrar mercados no coincidentes con ciertos criterios (para ayudar a identificar problemas)
+            if self.debug_mode and not matched and 'question' in market:
+                # Buscar coincidencias potenciales por nombre/pregunta
+                market_question_lower = market_question.lower()
+                for trade_id, trade in user_market_ids.items():
+                    trade_question = trade.get('question', '').lower()
+                    # Si hay una coincidencia significativa en el texto
+                    if (trade_question and market_question_lower and 
+                        (trade_question in market_question_lower or 
+                         market_question_lower in trade_question)):
+                        logger.info(f"Possible text match but ID mismatch: Market ID {market_id} ({market_question})")
+                        logger.info(f"  - Trade ID {trade_id} ({trade.get('question')})")
+                        logger.info(f"  - Alternative IDs: {alt_ids}")
+                        break
         
         logger.info(f"Found {len(user_resolved_markets)} resolved markets where you participated")
+        
+        # En modo debug, imprimir algunos ejemplos de mercados resueltos y trades para diagnóstico
+        if self.debug_mode and not user_resolved_markets and resolved_markets:
+            logger.info("=== DEBUGGING MARKET MATCHING ===")
+            logger.info(f"Sample of user trades ({min(5, len(user_trades))} of {len(user_trades)}):")
+            for i, trade in enumerate(user_trades[:5]):
+                logger.info(f"  Trade {i+1}: ID={trade.get('market_id')} - {trade.get('question', 'Unknown')}")
+            
+            logger.info(f"Sample of resolved markets ({min(5, len(resolved_markets))} of {len(resolved_markets)}):")
+            for i, market in enumerate(resolved_markets[:5]):
+                logger.info(f"  Market {i+1}: ID={market.get('id')} - {market.get('question', 'Unknown')}")
+                
+            if 'id' in resolved_markets[0]:
+                logger.info(f"Market ID type: {type(resolved_markets[0]['id']).__name__}")
+            if len(user_trades) > 0 and 'market_id' in user_trades[0]:
+                logger.info(f"Trade market_id type: {type(user_trades[0]['market_id']).__name__}")
+        
         return user_resolved_markets
     
     def get_condition_id_from_market(self, market_data: Dict[str, Any]) -> str:
@@ -388,6 +568,9 @@ class PolymarketRedeemer:
             # Obtener la predicción del usuario
             user_prediction = market_data.get("user_prediction", "UNKNOWN")
             
+            # Verificar si estamos en modo forzado
+            force_redeem = market_data.get("force_redeem", False)
+            
             # Mostrar información detallada en modo debug
             if self.debug_mode:
                 logger.info(f"Market data for redeeming:")
@@ -395,48 +578,112 @@ class PolymarketRedeemer:
                 logger.info(f"  Condition ID: {condition_id}")
                 logger.info(f"  Outcomes: {outcomes}")
                 logger.info(f"  User prediction: {user_prediction}")
+                if force_redeem:
+                    logger.info(f"  FORCE REDEEM MODE ENABLED")
             
+            # Si no tenemos resultado, intentar inferirlo
             if not result_value:
-                # Intentar obtener el resultado desde la API si no está en los datos del mercado
-                try:
-                    market_id = market_data.get("id")
-                    if market_id:
-                        # Consultar API para el resultado
-                        market_details_url = f"{self.gamma_api_url}/markets/{market_id}"
-                        response = requests.get(market_details_url)
-                        if response.status_code == 200:
-                            market_details = response.json()
-                            result_value = market_details.get("resultValue") or market_details.get("result") or market_details.get("winningOutcome")
-                            logger.info(f"Retrieved result from API: {result_value}")
-                except Exception as e:
-                    logger.error(f"Error retrieving market details: {e}")
-            
-            if not result_value:
-                logger.warning(f"Market {market_name} does not have a result value yet")
-                return False
+                # Si estamos en modo forzado, verificar outcomePrices y lastTradePrice para determinar ganador
+                outcome_prices = market_data.get("outcomePrices", [])
+                last_trade_price = market_data.get("lastTradePrice")
+                uma_resolved = market_data.get("umaResolutionStatus") == "resolved"
                 
-            # Buscar el índice ganador
-            for i, outcome in enumerate(outcomes):
-                # Comparar con el valor del resultado (puede variar según la API)
-                outcome_value = outcome
-                if isinstance(outcome, dict):
-                    outcome_value = outcome.get("value") or outcome.get("name")
+                logger.info(f"No explicit result, checking alternative indicators:")
+                logger.info(f"  Outcome prices: {outcome_prices}")
+                logger.info(f"  Last trade price: {last_trade_price}")
+                logger.info(f"  UMA resolution status: {market_data.get('umaResolutionStatus')}")
                 
-                if str(outcome_value) == str(result_value):
-                    winning_index = i
-                    break
+                # Verificamos si podemos determinar el resultado a partir de los precios
+                if outcomes and len(outcomes) == 2 and len(outcome_prices) == 2:
+                    # Para mercados binarios (YES/NO), buscamos precio "1" que marca ganador
+                    if outcome_prices[0] == "1" or outcome_prices[0] == 1:
+                        result_value = outcomes[0]  # YES ganó
+                        winning_index = 0
+                        logger.info(f"Determined winner from outcomePrices: {result_value}")
+                    elif outcome_prices[1] == "1" or outcome_prices[1] == 1:
+                        result_value = outcomes[1]  # NO ganó
+                        winning_index = 1
+                        logger.info(f"Determined winner from outcomePrices: {result_value}")
+                
+                # Si aún no tenemos ganador, verificar lastTradePrice
+                if winning_index is None and last_trade_price is not None and len(outcomes) == 2:
+                    # En mercados binarios, si lastTradePrice=1, generalmente NO ganó
+                    if last_trade_price == 1 or last_trade_price == "1":
+                        result_value = outcomes[1]  # NO ganó
+                        winning_index = 1
+                        logger.info(f"Determined winner from lastTradePrice=1: {result_value} (NO)")
+                    elif last_trade_price == 0 or last_trade_price == "0":
+                        result_value = outcomes[0]  # YES ganó
+                        winning_index = 0
+                        logger.info(f"Determined winner from lastTradePrice=0: {result_value} (YES)")
+                
+                # Si estamos en modo forzado y aún no tenemos ganador, pero el mercado está marcado como resuelto,
+                # usamos la predicción del usuario si coincide con lo que esperaríamos de los precios
+                if winning_index is None and force_redeem and uma_resolved:
+                    # Para el mercado alemán específicamente
+                    if "CDU/CSU, SPD, and BSW" in market_name:
+                        # Este mercado específico resolvió a "NO"
+                        if user_prediction == "NO":
+                            result_value = "No"
+                            winning_index = 1
+                            logger.info(f"Forcing redemption for market '{market_name}' with result: {result_value}")
+                    # Para otros mercados binarios, usar predicción si es compatible con los precios
+                    elif user_prediction in ["YES", "NO"] and len(outcomes) == 2:
+                        if user_prediction == "YES" and (outcome_prices[0] > outcome_prices[1] or last_trade_price == 0):
+                            result_value = outcomes[0]
+                            winning_index = 0
+                            logger.info(f"Forcing YES redemption based on prediction and price indicators")
+                        elif user_prediction == "NO" and (outcome_prices[1] > outcome_prices[0] or last_trade_price == 1):
+                            result_value = outcomes[1]
+                            winning_index = 1
+                            logger.info(f"Forcing NO redemption based on prediction and price indicators")
+                
+                # Como último recurso, intentar obtener el resultado desde la API
+                if winning_index is None:
+                    try:
+                        market_id = market_data.get("id")
+                        if market_id:
+                            # Consultar API para el resultado
+                            market_details_url = f"{self.gamma_api_url}/markets/{market_id}"
+                            response = requests.get(market_details_url)
+                            if response.status_code == 200:
+                                market_details = response.json()
+                                result_value = market_details.get("resultValue") or market_details.get("result") or market_details.get("winningOutcome")
+                                logger.info(f"Retrieved result from API: {result_value}")
+                    except Exception as e:
+                        logger.error(f"Error retrieving market details: {e}")
             
+            # Si todavía no tenemos un resultado ni índice ganador y no estamos en modo forzado
+            if winning_index is None and not force_redeem:
+                if not result_value:
+                    logger.warning(f"Market {market_name} does not have a result value yet")
+                    return False
+                    
+                # Buscar el índice ganador si tenemos resultado
+                for i, outcome in enumerate(outcomes):
+                    # Comparar con el valor del resultado (puede variar según la API)
+                    outcome_value = outcome
+                    if isinstance(outcome, dict):
+                        outcome_value = outcome.get("value") or outcome.get("name")
+                    
+                    if str(outcome_value) == str(result_value):
+                        winning_index = i
+                        break
+            
+            # En este punto, si aún no tenemos winning_index, no podemos continuar
             if winning_index is None:
                 logger.error(f"Could not determine winning index for market: {market_name}")
+                if force_redeem:
+                    logger.error(f"Force redeem failed - cannot determine winner even with force option")
                 logger.error(f"Result value: {result_value}")
                 logger.error(f"Available outcomes: {outcomes}")
                 return False
             
             # Verificar si el usuario ganó este mercado
             user_won = False
-            if user_prediction == "YES" and winning_index == 1:  # YES suele ser el índice 1
+            if user_prediction == "YES" and winning_index == 0:  # YES suele ser el índice 0
                 user_won = True
-            elif user_prediction == "NO" and winning_index == 0:  # NO suele ser el índice 0
+            elif user_prediction == "NO" and winning_index == 1:  # NO suele ser el índice 1
                 user_won = True
                 
             if not user_won:
@@ -473,7 +720,7 @@ class PolymarketRedeemer:
             
             # Firmar y enviar la transacción
             signed_tx = self.w3.eth.account.sign_transaction(tx, self.private_key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             
             logger.info(f"Transaction sent: {tx_hash.hex()}")
             logger.info("Waiting for confirmation...")
@@ -551,6 +798,10 @@ if __name__ == "__main__":
     parser.add_argument("--key", type=str, help="Private key (overrides .env)")
     parser.add_argument("--limit", type=int, help="Limit the number of markets to process")
     parser.add_argument("--random", action="store_true", help="Process markets in random order")
+    parser.add_argument("--force-redeem-market", type=str, help="Force redeem a specific market by ID even if result is not available")
+    parser.add_argument("--auto-redeem-all", action="store_true", help="Auto-redeem all positions where outcome can be determined")
+    parser.add_argument("--list-markets", action="store_true", help="List all markets where you participated with their IDs")
+    parser.add_argument("--search-market", type=str, help="Search for markets by keyword")
     args = parser.parse_args()
     
     # ADVERTENCIA: No es recomendable incluir claves privadas directamente en el código
@@ -560,7 +811,126 @@ if __name__ == "__main__":
     
     redeemer = PolymarketRedeemer(wallet_address=wallet, private_key=key, debug_mode=args.debug)
     
-    if args.dry_run:
+    if args.list_markets:
+        # Obtener todos los mercados y los trades del usuario
+        all_markets = redeemer.get_all_markets()
+        user_trades = redeemer.get_all_user_trades()
+        user_market_ids = {str(trade.get('market_id')): trade for trade in user_trades}
+        
+        # Encontrar mercados donde el usuario ha participado
+        user_markets = []
+        
+        # Buscar por ID directo
+        for market in all_markets:
+            market_id = str(market.get('id', ''))
+            if market_id in user_market_ids:
+                user_markets.append((market_id, market.get('question', 'Unknown')))
+                continue
+                
+            # Buscar IDs alternativos
+            for key in ['questionID', 'questionId', 'marketId', 'market_id']:
+                if key in market and market[key]:
+                    alt_id = str(market[key])
+                    if alt_id in user_market_ids:
+                        user_markets.append((alt_id, market.get('question', 'Unknown')))
+                        break
+        
+        # También incluir mercados desde los trades que no encontramos en la API
+        for trade_id, trade in user_market_ids.items():
+            if not any(market_id == trade_id for market_id, _ in user_markets):
+                user_markets.append((trade_id, trade.get('question', 'Unknown')))
+        
+        # Mostrar resultados
+        logger.info(f"Found {len(user_markets)} markets where you participated:")
+        for i, (market_id, market_name) in enumerate(sorted(user_markets, key=lambda x: x[1])):
+            logger.info(f"{i+1}. ID: {market_id} - {market_name}")
+            # Mostrar predicción si está disponible
+            if market_id in user_market_ids:
+                prediction = user_market_ids[market_id].get('prediction', 'UNKNOWN')
+                logger.info(f"   Your prediction: {prediction}")
+                
+    elif args.search_market:
+        # Buscar mercados por palabra clave
+        search_term = args.search_market.lower()
+        all_markets = redeemer.get_all_markets()
+        
+        matching_markets = []
+        for market in all_markets:
+            market_name = market.get('question', '').lower()
+            market_id = str(market.get('id', ''))
+            
+            if search_term in market_name:
+                matching_markets.append((market_id, market.get('question', 'Unknown')))
+        
+        logger.info(f"Found {len(matching_markets)} markets matching '{args.search_market}':")
+        for i, (market_id, market_name) in enumerate(matching_markets):
+            logger.info(f"{i+1}. ID: {market_id} - {market_name}")
+    elif args.auto_redeem_all:
+        # Auto-redención de todas las posiciones posibles
+        markets = redeemer.get_user_resolved_markets()
+        if not markets:
+            logger.info("No resolved markets found where you participated")
+            exit(0)
+            
+        logger.info(f"Found {len(markets)} markets where you participated. Attempting to auto-redeem...")
+        
+        # Procesar cada mercado, activando force_redeem para intentar inferir resultados
+        success_count = 0
+        skipped_count = 0
+        
+        for market in markets:
+            # Añadir flag para intentar redención forzada
+            market['force_redeem'] = True
+            market_id = market.get('id', 'Unknown ID')
+            market_name = market.get('question', 'Unknown market')
+            
+            logger.info(f"Attempting auto-redeem for market {market_id}: {market_name}")
+            try:
+                # Intentar redimir con la lógica de redención forzada
+                if redeemer.redeem_position(market):
+                    success_count += 1
+                    # Esperar un poco entre transacciones
+                    time.sleep(2)
+                else:
+                    skipped_count += 1
+                    logger.info(f"Skipped market {market_id} - could not determine outcome or you didn't win")
+            except Exception as e:
+                skipped_count += 1
+                logger.error(f"Error processing market {market_id}: {e}")
+                continue
+        
+        logger.info(f"Auto-redeem complete. Successfully redeemed: {success_count}, Skipped: {skipped_count}")
+    elif args.force_redeem_market:
+        # Obtener mercado específico por ID y forzar redención
+        try:
+            market_id = args.force_redeem_market
+            logger.info(f"Attempting to force redeem for market ID: {market_id}")
+            
+            # Obtener detalles del mercado específico
+            market_url = f"{redeemer.gamma_api_url}/markets/{market_id}"
+            headers = {"Accept": "application/json", "User-Agent": "Mozilla/5.0"}
+            response = requests.get(market_url, headers=headers)
+            
+            if response.status_code == 200:
+                market_data = response.json()
+                # Buscar en nuestros trades para ver si participamos
+                user_trades = redeemer.get_all_user_trades()
+                user_market_ids = {str(trade.get('market_id')): trade for trade in user_trades}
+                
+                if market_id in user_market_ids:
+                    # Añadir la predicción del usuario al mercado
+                    market_data['user_prediction'] = user_market_ids[market_id].get('prediction', 'UNKNOWN')
+                    # Habilitar modo forzado para la redención
+                    market_data['force_redeem'] = True
+                    logger.info(f"Found your prediction: {market_data['user_prediction']}")
+                    redeemer.redeem_position(market_data)
+                else:
+                    logger.error(f"You did not participate in market ID {market_id}")
+            else:
+                logger.error(f"Could not retrieve market with ID {market_id}")
+        except Exception as e:
+            logger.error(f"Error forcing redeem: {e}")
+    elif args.dry_run:
         logger.info("DRY RUN MODE - No transactions will be executed")
         # Solo mostrar mercados y posiciones
         markets = redeemer.get_user_resolved_markets()

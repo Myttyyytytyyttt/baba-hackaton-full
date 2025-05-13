@@ -243,7 +243,7 @@ class Trader:
             try:
                 self.logger.info(f"Intentando transacción (intento {attempt + 1}/{max_retries})")
                 print(f"Executing trade for position: {position}")
-                trade = self.polymarket.execute_market_order(market_data, amount)
+                trade = self.polymarket.execute_market_order(market_data, amount, position)
                 
                 if trade:
                     self.logger.info("Transacción ejecutada exitosamente")
@@ -371,7 +371,8 @@ class Trader:
                     print(f"Reasoning: {best_trade.get('prediction', 'No prediction available')}")
                     print(f"===================={Style.RESET_ALL}")
                     
-                    amount = 1.0
+                    # Aumentar a $1.2 para superar el mínimo requerido de $1
+                    amount = 1.2
                     best_trade['size'] = amount
                     best_trade['price'] = target_price
                     
@@ -400,7 +401,8 @@ class Trader:
                         continue
 
                     # Ejecutar trade pasando best_trade como argumento separado
-                    trade = self.polymarket.execute_market_order(market_data, amount)
+                    position = best_trade.get('position', 'UNKNOWN')
+                    trade = self.polymarket.execute_market_order(market_data, amount, position)
                     
                     if trade:
                         self.logger.info(f"Trade executed successfully in new market")
@@ -775,22 +777,18 @@ class Trader:
                 # Decisión: ¿Ejecutar la operación?
                 if best_trade.get('should_trade', False):
                     self.logger.info(f"Decision to operate in new market: {market_data.get('question', 'Unknown')}")
-                    amount = 1.0
+                    # Aumentar a $1.2 para superar el mínimo requerido de $1
+                    amount = 1.2
                     best_trade['size'] = amount
                     best_trade['price'] = target_price
                     
-                    # Asegurarnos de que simple_market tiene el atributo trade
-                    try:
-                        if not hasattr(simple_market, 'trade'):
-                            setattr(simple_market, 'trade', {})
-                        simple_market.trade.update(best_trade)
-                    except Exception as e:
-                        self.logger.error(f"Error setting trade attribute: {e}")
-                        print(f"{Fore.RED}Error setting trade attribute: {e}{Style.RESET_ALL}")
-                        # Si hay un error, crear un diccionario trade completamente nuevo
-                        setattr(simple_market, 'trade', best_trade.copy())
-                    
-                    # Almacenar predicción
+                    # No intentemos modificar market_data directamente, sino pasar best_trade como argumento
+                    print(f"\n{Fore.GREEN}6. TRYING TRADE FOR MARKET {market_data.question}")
+                    print(f"   Amount: ${amount} USDC")
+                    print(f"   Price: {best_trade['price']}")
+                    print(f"   Side: BUY {best_trade.get('position')}{Style.RESET_ALL}")
+
+                    # Store prediction regardless of dry run mode
                     prediction_id = self.prediction_store.store_trade_prediction(
                         market_data=simple_market,
                         trade_data=best_trade,
@@ -806,7 +804,8 @@ class Trader:
                         return
                         
                     # Ejecutar trade
-                    trade = self.polymarket.execute_market_order(simple_market, amount)
+                    position = best_trade.get('position', 'UNKNOWN')
+                    trade = self.polymarket.execute_market_order(simple_market, amount, position)
                     if trade:
                         self.logger.info(f"Trade executed successfully in new market")
                         print(f"{Fore.GREEN}Trade executed successfully!{Style.RESET_ALL}")

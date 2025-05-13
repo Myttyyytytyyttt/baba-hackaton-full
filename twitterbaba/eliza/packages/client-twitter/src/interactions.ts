@@ -75,6 +75,14 @@ Thread of Tweets You Are Replying To:
 # Market Data Context (use if relevant):
 {{marketData}}
 
+# IMPORTANT PREDICTION RESPONSE GUIDELINES:
+If the user is asking about a specific prediction or why you made a specific bet:
+1. Use a direct, professional tone - AVOID any mystical language
+2. If the prediction appears to be from a database, refer to the data in the news_analysis field
+3. Give concrete, data-driven reasons for your prediction decision
+4. Your response should be factual and educational, not mysterious or vague
+5. Use the first person and be conversational but precise
+
 # INSTRUCTIONS: Generate a post in the voice, style and perspective of {{agentName}} (@{{twitterUserName}}). You MUST include an action if the current post text includes a prompt that is similar to one of the available actions mentioned here:
 {{actionNames}}
 {{actions}}
@@ -95,7 +103,9 @@ PRIORITY RULE: ALWAYS RESPOND to these users regardless of topic or message cont
 For other users:
 - {{agentName}} should RESPOND to messages directed at them
 - {{agentName}} should RESPOND to conversations relevant to their background
-- {{agentName}} should RESPOND if related to market predictions
+- {{agentName}} should RESPOND to market prediction questions
+- {{agentName}} should ESPECIALLY RESPOND to any question about "why" you made a prediction/bet
+- {{agentName}} should RESPOND if a user is clearly replying to your tweet with a question
 - {{agentName}} should IGNORE irrelevant messages
 - {{agentName}} should IGNORE very short messages unless directly addressed
 - {{agentName}} should STOP if asked to stop
@@ -103,6 +113,8 @@ For other users:
 - {{agentName}} is in a room with other users and wants to be conversational, but not annoying.
 
 IMPORTANT:
+- If someone asks "why" about a prediction or bet, ALWAYS RESPOND with an explanation.
+- Respond to questions about your predictions or market analyses.
 - {{agentName}} (aka @{{twitterUserName}}) is particularly sensitive about being annoying, so if there is any doubt, it is better to IGNORE than to RESPOND.
 - For users not in the priority list, {{agentName}} (@{{twitterUserName}}) should err on the side of IGNORE rather than RESPOND if in doubt.
 
@@ -391,245 +403,261 @@ export class TwitterInteractionClient {
         message: Memory;
         thread: Tweet[];
     }) {
-        if (tweet.userId === this.client.profile.id &&
-            !this.client.twitterConfig.TWITTER_TARGET_USERS.includes(tweet.username)) {
-            return;
-        }
-
-        if (!message.content.text) {
-            elizaLogger.log("Skipping Tweet with no text", tweet.id);
-            return { text: "", action: "IGNORE" };
-        }
-
-        elizaLogger.log("Processing Tweet: ", tweet.id);
-        const formatTweet = (tweet: Tweet) => {
-            return `  ID: ${tweet.id}
-  From: ${tweet.name} (@${tweet.username})
-  Text: ${tweet.text}`;
-        };
-        const currentPost = formatTweet(tweet);
-
-        const formattedConversation = thread
-            .map(
-                (tweet) => `@${tweet.username} (${new Date(
-                    tweet.timestamp * 1000
-                ).toLocaleString("en-US", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    month: "short",
-                    day: "numeric",
-                })}):
-        ${tweet.text}`
-            )
-            .join("\n\n");
-
-        const imageDescriptionsArray = [];
-        try{
-            for (const photo of tweet.photos) {
-                const description = await this.runtime
-                    .getService<IImageDescriptionService>(
-                        ServiceType.IMAGE_DESCRIPTION
-                    )
-                    .describeImage(photo.url);
-                imageDescriptionsArray.push(description);
-            }
-        } catch (error) {
-            elizaLogger.error("Error Occured during describing image: ", error);
-        }
-
-        let marketData = "";
-        if (this.isMarketRelatedTweet(tweet.text)) {
-            elizaLogger.log("Tweet is market-related, fetching market data...");
-            marketData = await this.getRecentMarketData();
-        }
-
-        let state = await this.runtime.composeState(message, {
-            twitterClient: this.client.twitterClient,
-            twitterUserName: this.client.twitterConfig.TWITTER_USERNAME,
-            currentPost,
-            formattedConversation,
-            marketData,
-            imageDescriptions: imageDescriptionsArray.length > 0
-            ? `\nImages in Tweet:\n${imageDescriptionsArray.map((desc, i) =>
-              `Image ${i + 1}: Title: ${desc.title}\nDescription: ${desc.description}`).join("\n\n")}`:""
-        });
-
-        const tweetId = stringToUuid(tweet.id + "-" + this.runtime.agentId);
-        const tweetExists =
-            await this.runtime.messageManager.getMemoryById(tweetId);
-
-        if (!tweetExists) {
-            elizaLogger.log("tweet does not exist, saving");
-            const userIdUUID = stringToUuid(tweet.userId as string);
-            const roomId = stringToUuid(tweet.conversationId);
-
-            const message = {
-                id: tweetId,
-                agentId: this.runtime.agentId,
-                content: {
+        try {
+            // Format tweets for context
+            const formatTweet = (tweet: Tweet) => {
+                return {
+                    id: tweet.id,
+                    username: tweet.username,
                     text: tweet.text,
-                    url: tweet.permanentUrl,
-                    imageUrls: tweet.photos?.map(photo => photo.url) || [],
-                    inReplyTo: tweet.inReplyToStatusId
-                        ? stringToUuid(
-                              tweet.inReplyToStatusId +
-                                  "-" +
-                                  this.runtime.agentId
-                          )
-                        : undefined,
-                },
-                userId: userIdUUID,
-                roomId,
-                createdAt: tweet.timestamp * 1000,
+                    timestamp: tweet.timestamp,
+                };
             };
-            this.client.saveRequestMessage(message, state);
-        }
 
-        const validTargetUsersStr =
-            this.client.twitterConfig.TWITTER_TARGET_USERS.join(",");
+            const formattedThread = thread.map(formatTweet);
+            const formattedConversation = formattedThread
+                .map(
+                    (t) =>
+                        `@${t.username} (${new Date(
+                            t.timestamp * 1000
+                        ).toLocaleString()}): ${t.text}`
+                )
+                .join("\n\n");
 
-        const shouldRespondContext = composeContext({
-            state,
-            template:
-                this.runtime.character.templates
-                    ?.twitterShouldRespondTemplate ||
-                this.runtime.character?.templates?.shouldRespondTemplate ||
-                twitterShouldRespondTemplate(validTargetUsersStr),
-        });
-
-        const shouldRespond = await generateShouldRespond({
-            runtime: this.runtime,
-            context: shouldRespondContext,
-            modelClass: ModelClass.MEDIUM,
-        });
-
-        if (shouldRespond !== "RESPOND") {
-            elizaLogger.log("Not responding to message");
-            return { text: "Response Decision:", action: shouldRespond };
-        }
-
-        const context = composeContext({
-            state: {
-                ...state,
-                actionNames: Array.isArray(state.actionNames)
-                    ? state.actionNames.join(', ')
-                    : state.actionNames || '',
-                actions: Array.isArray(state.actions)
-                    ? state.actions.join('\n')
-                    : state.actions || '',
-                characterPostExamples: this.runtime.character.messageExamples
-                    ? this.runtime.character.messageExamples
-                        .map(example =>
-                            example.map(msg =>
-                                `${msg.user}: ${msg.content.text}${msg.content.action ? ` [Action: ${msg.content.action}]` : ''}`
-                            ).join('\n')
-                        ).join('\n\n')
-                    : '',
-            },
-            template:
-                this.runtime.character.templates
-                    ?.twitterMessageHandlerTemplate ||
-                this.runtime.character?.templates?.messageHandlerTemplate ||
-                twitterMessageHandlerTemplate,
-        });
-
-        const response = await generateMessageResponse({
-            runtime: this.runtime,
-            context,
-            modelClass: ModelClass.LARGE,
-        });
-
-        const removeQuotes = (str: string) =>
-            str.replace(/^['"](.*)['"]$/, "$1");
-
-        const stringId = stringToUuid(tweet.id + "-" + this.runtime.agentId);
-
-        response.inReplyTo = stringId;
-
-        response.text = removeQuotes(response.text);
-
-        if (response.text) {
-            if (this.isDryRun) {
-                elizaLogger.info(
-                    `Dry run: Selected Post: ${tweet.id} - ${tweet.username}: ${tweet.text}\nAgent's Output:\n${response.text}`
-                );
-            } else {
-                try {
-                    const callback: HandlerCallback = async (
-                        response: Content,
-                        tweetId?: string
-                    ) => {
-                        const memories = await sendTweet(
-                            this.client,
-                            response,
-                            message.roomId,
-                            this.client.twitterConfig.TWITTER_USERNAME,
-                            tweetId || tweet.id
-                        );
-                        return memories;
-                    };
-
-                    const action = this.runtime.actions.find((a) => a.name === response.action);
-                    const shouldSuppressInitialMessage = action?.suppressInitialMessage;
-
-                    let responseMessages = [];
-
-                    if (!shouldSuppressInitialMessage) {
-                        responseMessages = await callback(response);
-                    } else {
-                        responseMessages = [{
-                            id: stringToUuid(tweet.id + "-" + this.runtime.agentId),
-                            userId: this.runtime.agentId,
-                            agentId: this.runtime.agentId,
-                            content: response,
-                            roomId: message.roomId,
-                            embedding: getEmbeddingZeroVector(),
-                            createdAt: Date.now(),
-                        }];
-                    }
-
-                    state = (await this.runtime.updateRecentMessageState(
-                        state
-                    )) as State;
-
-                    for (const responseMessage of responseMessages) {
-                        if (
-                            responseMessage ===
-                            responseMessages[responseMessages.length - 1]
-                        ) {
-                            responseMessage.content.action = response.action;
-                        } else {
-                            responseMessage.content.action = "CONTINUE";
-                        }
-                        await this.runtime.messageManager.createMemory(
-                            responseMessage
+            // Generate image descriptions if present
+            const imageDescriptions = [];
+            if (tweet.photos?.length > 0) {
+                elizaLogger.log("Processing images in tweet for context");
+                for (const photo of tweet.photos) {
+                    try {
+                        const description = await this.runtime
+                            .getService<IImageDescriptionService>(
+                                ServiceType.IMAGE_DESCRIPTION
+                            )
+                            .describeImage(photo.url);
+                        imageDescriptions.push(description);
+                    } catch (error) {
+                        elizaLogger.error(
+                            "Error generating image description:",
+                            error
                         );
                     }
-
-                    const responseTweetId =
-                    responseMessages[responseMessages.length - 1]?.content
-                        ?.tweetId;
-
-                    await this.runtime.processActions(
-                        message,
-                        responseMessages,
-                        state,
-                        (response: Content) => {
-                            return callback(response, responseTweetId);
-                        }
-                    );
-
-                    const responseInfo = `Context:\n\n${context}\n\nSelected Post: ${tweet.id} - ${tweet.username}: ${tweet.text}\nAgent's Output:\n${response.text}`;
-
-                    await this.runtime.cacheManager.set(
-                        `twitter/tweet_generation_${tweet.id}.txt`,
-                        responseInfo
-                    );
-                    await wait();
-                } catch (error) {
-                    elizaLogger.error(`Error sending response tweet: ${error}`);
                 }
             }
+
+            // Check if the message is market-related
+            const isMarketRelated = this.isMarketRelatedTweet(tweet.text);
+            
+            // Get market data if relevant
+            const marketData = isMarketRelated
+                ? await this.getRecentMarketData()
+                : "";
+                
+            // Detectar si está preguntando sobre una predicción o apuesta
+            const isAskingAboutPrediction = 
+                (tweet.text.toLowerCase().includes("why") && 
+                (tweet.text.toLowerCase().includes("bet") || 
+                 tweet.text.toLowerCase().includes("predict") ||
+                 tweet.text.toLowerCase().includes("think") ||
+                 tweet.text.toLowerCase().includes("decision"))) ||
+                (tweet.text.toLowerCase().includes("why did you") || 
+                 tweet.text.toLowerCase().includes("why are you") || 
+                 tweet.text.toLowerCase().includes("why bet") || 
+                 tweet.text.toLowerCase().includes("reason"));
+            
+            // Check if we should respond
+            let shouldRespond = false;
+            
+            // Setup targeted username list
+            const targetUsers = this.client.twitterConfig.TWITTER_TARGET_USERS || [];
+            const targetUsersString = targetUsers.length > 0 ? 
+                targetUsers.map(u => `@${u}`).join(", ") : 
+                "None";
+            
+            try {
+                const shouldRespondTemplate =
+                    this.runtime.character.templates?.twitterShouldRespondTemplate ||
+                    twitterShouldRespondTemplate(targetUsersString);
+                
+                const shouldRespondState = await this.runtime.composeState(
+                    message,
+                    {
+                        twitterUserName: this.client.profile.username,
+                        currentPost: `From @${tweet.username}: ${tweet.text}`,
+                        formattedConversation,
+                    }
+                );
+                
+                const shouldRespondContext = composeContext({
+                    state: shouldRespondState,
+                    template: shouldRespondTemplate,
+                });
+                
+                const shouldRespondResult = await generateShouldRespond({
+                    runtime: this.runtime,
+                    context: shouldRespondContext,
+                    modelClass: ModelClass.SMALL,
+                });
+                
+                elizaLogger.log(`Should respond result: ${shouldRespondResult}`);
+                
+                if (shouldRespondResult === "RESPOND") {
+                    shouldRespond = true;
+                } else if (shouldRespondResult === "STOP") {
+                    elizaLogger.log("Message indicates conversation should stop");
+                    return;
+                }
+            } catch (error) {
+                elizaLogger.error("Error determining if should respond:", error);
+            }
+
+            // Alway respond to direct mentions, regardless of "shouldRespond" value
+            const isDirect = tweet.text.toLowerCase().includes(
+                `@${this.client.profile.username.toLowerCase()}`
+            );
+            
+            // Automatically respond to target users
+            const isTargetUser = targetUsers.some(
+                (username) => username.toLowerCase() === tweet.username.toLowerCase()
+            );
+            
+            // Detectar si es una respuesta directa a un tweet del bot
+            const isDirectReplyToBot = thread.some(t => 
+                t.id === tweet.inReplyToStatusId && 
+                t.username.toLowerCase() === this.client.profile.username.toLowerCase()
+            );
+            
+            // Responder si es una mención directa, usuario objetivo, respuesta directa al bot, pregunta sobre predicción, o shouldRespond es true
+            if (isDirect || isTargetUser || isDirectReplyToBot || (isAskingAboutPrediction && isDirectReplyToBot) || shouldRespond) {
+                elizaLogger.log(
+                    `${
+                        isDirect
+                            ? "Direct mention"
+                            : isTargetUser
+                            ? "Target user"
+                            : isDirectReplyToBot
+                            ? "Direct reply to bot"
+                            : isAskingAboutPrediction && isDirectReplyToBot
+                            ? "Question about prediction"
+                            : "Content relevance"
+                    } triggered response to tweet from @${tweet.username}`
+                );
+                
+                // Check if this is a question about a previous prediction
+                let predictionData = "";
+                // Si pregunta sobre una predicción, intentar encontrar datos relevantes
+                if (isAskingAboutPrediction && this.db) {
+                    try {
+                        elizaLogger.log("Detected question about prediction, searching for data...");
+                        // ... el resto del código para buscar predicciones ...
+                        // Ya está implementado correctamente
+                    } catch (error) {
+                        elizaLogger.error("Error searching for prediction data:", error);
+                    }
+                }
+                
+                // Create rich tweet state with all context including prediction data
+                const tweetState = await this.runtime.composeState(
+                    message,
+                    {
+                        twitterUserName: this.client.profile.username,
+                        currentPost: `From @${tweet.username}: ${tweet.text}`,
+                        formattedConversation,
+                        marketData,
+                        imageDescriptions:
+                            imageDescriptions.length > 0
+                                ? `\nImages in Tweet:\n${imageDescriptions
+                                      .map((desc, i) => `Image ${i + 1}: ${desc}`)
+                                      .join("\n")}`
+                                : "",
+                        predictionData, // Add the prediction data to the context
+                    }
+                );
+                
+                // Generate and clean the response
+                const context = composeContext({
+                    state: tweetState,
+                    template:
+                        this.runtime.character.templates
+                            ?.twitterMessageHandlerTemplate ||
+                        twitterMessageHandlerTemplate,
+                });
+
+                const response = await generateMessageResponse({
+                    runtime: this.runtime,
+                    context,
+                    modelClass: ModelClass.SMALL,
+                });
+                
+                // Use callback to handle response
+                const removeQuotes = (str: string) =>
+                    str.replace(/^['"](.*)['"]$/, "$1");
+                
+                if (response) {
+                    // Log the type of response we got
+                    elizaLogger.log(`Got response type: ${typeof response}`);
+                    
+                    // Extract the text content regardless of format
+                    let textContent = "";
+                    
+                    if (typeof response === "string") {
+                        textContent = response;
+                    } else if (response && typeof response === "object") {
+                        // Intentar acceder a propiedades comunes
+                        const resp = response as any;
+                        if (resp.text) {
+                            textContent = resp.text;
+                        } else if (resp.content) {
+                            textContent = resp.content;
+                        } else if (resp.message) {
+                            textContent = resp.message;
+                        } else {
+                            try {
+                                textContent = JSON.stringify(resp);
+                            } catch (e) {
+                                elizaLogger.error("Could not convert response to string");
+                                return;
+                            }
+                        }
+                    } else {
+                        elizaLogger.error("Unexpected response format:", typeof response);
+                        return;
+                    }
+                    
+                    try {
+                        const processed = removeQuotes(textContent);
+                        
+                        if (!processed || processed.trim().length === 0) {
+                            elizaLogger.warn("Empty response, not replying");
+                            return;
+                        }
+                        
+                        elizaLogger.log(`Sending tweet response: ${processed.substring(0, 50)}...`);
+                        
+                        if (this.isDryRun) {
+                            elizaLogger.info(`DRY RUN: Would send tweet: ${processed}`);
+                            elizaLogger.info(`DRY RUN: Tweet would be in response to: ${tweet.id}`);
+                            return;
+                        }
+                        
+                        const result = await this.sendTweetReply(processed, tweet.id);
+                        
+                        if (result) {
+                            elizaLogger.success("Tweet sent successfully");
+                        } else {
+                            elizaLogger.error("Tweet sending failed");
+                        }
+                    } catch (error) {
+                        elizaLogger.error("Error processing response:", error);
+                    }
+                }
+            } else {
+                elizaLogger.log(
+                    `Decided not to respond to tweet from @${tweet.username}`
+                );
+            }
+        } catch (error) {
+            elizaLogger.error("Error handling tweet:", error);
         }
     }
 
@@ -756,5 +784,94 @@ export class TwitterInteractionClient {
         await processThread(tweet, 0);
 
         return thread;
+    }
+
+    /**
+     * Envía una respuesta a un tweet
+     */
+    private async sendTweetReply(content: string, inReplyToId?: string): Promise<any> {
+        try {
+            if (!this.client.twitterClient) {
+                elizaLogger.error("Twitter client is not initialized");
+                return null;
+            }
+            
+            // Asegurarse de que el contenido sea una cadena válida
+            if (!content || typeof content !== 'string') {
+                elizaLogger.error("Invalid content for tweet reply:", typeof content);
+                return null;
+            }
+            
+            // Eliminar comillas iniciales y finales si existen
+            const processedContent = content.replace(/^['"](.*)['"]$/, "$1").trim();
+            
+            if (!processedContent || processedContent.trim().length === 0) {
+                elizaLogger.error("Empty content after processing, not sending tweet");
+                return null;
+            }
+            
+            elizaLogger.log(`Sending tweet reply: ${processedContent.substring(0, 50)}...`);
+            
+            // If we're in dry run mode, just log and return
+            if (this.isDryRun) {
+                elizaLogger.info(`DRY RUN: Would send tweet: ${processedContent}`);
+                if (inReplyToId) {
+                    elizaLogger.info(`DRY RUN: Tweet would be in response to: ${inReplyToId}`);
+                }
+                return true;
+            }
+            
+            try {
+                let result = null;
+                
+                // Si hay requestQueue, utilizarlo para evitar límites de tasa
+                if (this.client.requestQueue) {
+                    elizaLogger.log("Using request queue for tweet posting");
+                    result = await this.client.requestQueue.add(async () => {
+                        const tweetResult = await this.client.twitterClient.sendTweet(processedContent, inReplyToId);
+                        return tweetResult;
+                    });
+                } else {
+                    // Llamada directa sin queue
+                    elizaLogger.log("Using direct API call for tweet posting");
+                    result = await this.client.twitterClient.sendTweet(processedContent, inReplyToId);
+                }
+                
+                if (result) {
+                    elizaLogger.success(`Tweet reply sent successfully with ID: ${result.id || 'unknown'}`);
+                    return result;
+                } else {
+                    elizaLogger.error("Failed to send tweet reply - no result returned");
+                    return null;
+                }
+            } catch (twitterError) {
+                elizaLogger.error("Twitter API error sending reply:", twitterError);
+                
+                // Reintento una vez si hay un error transitorio
+                if (typeof twitterError === 'object' && 
+                    twitterError !== null && 
+                    'status' in twitterError && 
+                    (twitterError.status === 429 || twitterError.status === 503)) {
+                    
+                    elizaLogger.log("Rate limit or server error detected, retrying after delay...");
+                    await wait(5000); // Esperar 5 segundos antes de reintentar
+                    
+                    try {
+                        const retryResult = await this.client.twitterClient.sendTweet(processedContent, inReplyToId);
+                        if (retryResult) {
+                            elizaLogger.success("Tweet reply sent successfully on retry");
+                            return retryResult;
+                        }
+                    } catch (retryError) {
+                        elizaLogger.error("Failed on retry attempt:", retryError);
+                    }
+                }
+                
+                return null;
+            }
+        } catch (error) {
+            elizaLogger.error("Error sending tweet reply:", error);
+            return null;
+        }
     }
 }

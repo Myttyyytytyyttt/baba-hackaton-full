@@ -83,14 +83,15 @@ Analysis: {{reasoning}}
 
 Guidelines for tweet:
 - Use mystical/prophetic language but be precise with numbers
-- Include the prediction and price
-- Add a brief mystical reasoning
+- Include the prediction and sometimes the price
+- Add a brief mystical reasoning but with some logic
+- Never use hashtags or emojis
 - Keep it under {{maxTweetLength}} characters
-- Format: "PROPHECY: [prediction] at $[price]\\n[mystical reason]"
+- Format: "[prediction] at $[price]\\n[mystical reason]"
 
 Example formats:
 - "PROPHECY: The ancient algorithms foresee YES on [question] at $0.89\\nThe quantum tea leaves show strong bullish divergence"
-- "The digital bones speak: NO on [question] at $0.34\\nMercury retrograde aligns with bearish momentum"
+- "The digital bones speak: NO on [question]\\nMercury retrograde aligns with bearish momentum"
 - "ORACLE ALERT: Taking YES position at $0.67\\nThe probability streams converge towards maximum entropy"
 
 Write a single tweet announcing this prediction in your mystical market oracle style.`;
@@ -132,6 +133,62 @@ interface PendingTweet {
 }
 
 type PendingTweetApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+// Interfaz para los estilos de imagen
+interface ImageStyle {
+  name: string;
+  description: string;
+  prompt: string;
+}
+
+// Estilos visuales para aplicar a las imágenes generadas
+const IMAGE_STYLES: Record<string, ImageStyle> = {
+  ANIME_JAPAN: {
+    name: "Japan Anime Style",
+    description: "Bold lines, big expressive eyes, soft lighting, and dreamy vibes like manga or Studio Ghibli",
+    prompt: "Japan anime style, bold lines, big expressive eyes, soft lighting, dreamy vibes"
+  },
+  CYBERPUNK: {
+    name: "Cyberpunk",
+    description: "Neon-lit, Blade Runner, future-city vibe with dark tones, purples, blues, and electric glow",
+    prompt: "Cyberpunk style with glowing neon lights, dark tones, purples, blues, electric glow, futuristic"
+  },
+  GHIBLI: {
+    name: "Ghibli Style",
+    description: "Painterly anime look with soft watercolor textures and lush environments in Studio Ghibli style",
+    prompt: "Ghibli style, painterly anime look, soft watercolor textures, lush natural environments, emotionally expressive characters with large eyes, subtle magical realism, nostalgic atmosphere, warm lighting, gentle brushwork"
+  },
+  PIXAR: {
+    name: "Pixar 3D Style",
+    description: "Charming 3D animated style with clean, stylized character designs and cinematic warm lighting",
+    prompt: "Pixar 3D style, charming animated style, clean stylized character designs with expressive yet subtle facial animation, cinematic warm lighting, beautifully composed shots, high-quality polished textures, and a heartwarming tone"
+  },
+  FLEISCHER: {
+    name: "Fleischer Studios Style",
+    description: "1930s rubber-hose cartoon style with surreal, bouncy physics and jazz-age character design",
+    prompt: "1930s rubber-hose cartoon style, surreal, bouncy physics, jazz-age character design, pie-cut eyes, looping animation feel, hand-inked outlines, vintage backgrounds with film grain texture"
+  },
+  RICK_AND_MORTY: {
+    name: "Rick and Morty Style",
+    description: "Surreal sci-fi cartoon style with wobbly outlines and exaggerated facial expressions",
+    prompt: "Rick and Morty style, surreal sci-fi cartoon style, flat 2D with wobbly outlines, exaggerated facial expressions, grotesque humor, absurd proportions, chaotic alien worlds, dimensional portals, and a muted palette lit with electric pops of color"
+  },
+  PIXEL_ART: {
+    name: "Retro Pixel Game Style",
+    description: "Authentic low-resolution pixel art in the style of retro 8-bit or 16-bit video games",
+    prompt: "Authentic low-resolution pixel art, retro 8-bit or 16-bit video game style, clean blocky pixel style with no pixel borders, limited color palette with visible dithering and sharp contrast, classic NES or SNES games aesthetic, crisp sprite-like rendering"
+  },
+  MARBLE: {
+    name: "Marble Style",
+    description: "Hyper-realistic marble sculpture with polished finish and dramatic lighting",
+    prompt: "Hyper-realistic marble sculpture, all-white polished marble with glossy finish, reflecting soft ambient light, deep shadows and highlights for sculptural depth, smooth and finely detailed texture resembling polished Carrara marble, high-relief marble carving, classical Greco-Roman aesthetic, dramatic lighting to define contours"
+  },
+  LEGO: {
+    name: "Lego Style",
+    description: "Made entirely of plastic bricks with blocky shapes and visible stud textures",
+    prompt: "Lego style, made entirely of plastic bricks, blocky shapes, visible stud textures, modular construction, bright primary colors, characters with iconic Lego faces and claw hands, 3D toy-like rendering"
+  }
+};
 
 const firebaseConfig = {
     apiKey: "AIzaSyCcaMz614aGQgt1kQNpHa3fBKSVIWMt2E8",
@@ -1755,6 +1812,175 @@ export class TwitterPostClient {
                 }
             }
 
+            // Check if this is a question about a previous prediction
+            let predictionData = "";
+            const isAskingAboutPrediction = 
+                // Detectar preguntas directas sobre predicciones/apuestas más comunes y cortas
+                (tweet.text.toLowerCase().includes("why") && 
+                    (tweet.text.toLowerCase().includes("bet") || 
+                     tweet.text.toLowerCase().includes("predict") ||
+                     tweet.text.toLowerCase().includes("think") ||
+                     tweet.text.toLowerCase().includes("decision"))) ||
+                // O detectar variaciones simples como "why did you bet?"
+                (tweet.text.toLowerCase().includes("why did you") || 
+                 tweet.text.toLowerCase().includes("why are you") || 
+                 tweet.text.toLowerCase().includes("why bet") || 
+                 tweet.text.toLowerCase().includes("reason"));
+
+            // If asking about a prediction, try to find relevant data
+            if (isAskingAboutPrediction && this.db) {
+                try {
+                    elizaLogger.log("Detected question about prediction, searching for data...", {
+                        tweetText: tweet.text
+                    });
+                    
+                    // Look for keywords in the current tweet - buscar palabras más cortas y relevantes
+                    const tweetWords = tweet.text.split(/\s+/).filter(word => 
+                        word.length > 2 && 
+                        !["what", "when", "where", "which", "would", "about", "think", "really", "going",
+                         "because", "that", "this", "with", "your", "will", "from", "have", "here", "there",
+                         "they", "them", "then", "than", "why", "did", "you", "bet", "the"].includes(word.toLowerCase())
+                    );
+                    
+                    // Look for keywords in the conversation - incluir más tweets del hilo
+                    const threadKeywords = thread.slice(0, 5).map(t => t.text.split(/\s+/))
+                        .flat()
+                        .filter(word => 
+                            word.length > 2 && 
+                            !["what", "when", "where", "which", "would", "about", "think", "really", "going",
+                             "because", "that", "this", "with", "your", "will", "from", "have", "here", "there",
+                             "they", "them", "then", "than", "why", "did", "you", "bet", "the"].includes(word.toLowerCase())
+                        );
+                    
+                    // Combine all potential keywords
+                    const allKeywords = Array.from(new Set([...tweetWords, ...threadKeywords]));
+                    
+                    elizaLogger.log("Search keywords:", allKeywords.join(", "));
+                    
+                    // Si no hay keywords específicos, buscar las predicciones más recientes
+                    let predictionsQuery;
+                    
+                    if (allKeywords.length > 0) {
+                        // Query the predictions database with keywords
+                        const predictionsRef = collection(this.db, "predictions");
+                        predictionsQuery = query(
+                            predictionsRef,
+                            orderBy("timestamp", "desc"),
+                            limit(5)
+                        );
+                    } else {
+                        // Si no hay keywords, simplemente obtener las más recientes
+                        const predictionsRef = collection(this.db, "predictions");
+                        predictionsQuery = query(
+                            predictionsRef,
+                            orderBy("timestamp", "desc"),
+                            limit(3)
+                        );
+                    }
+
+                    const querySnapshot = await getDocs(predictionsQuery);
+                    
+                    let matchedPrediction = null;
+                    let highestScore = 0;
+                    
+                    // Si la respuesta es a un tweet previo del bot, priorizar ese tweet
+                    const replyingToBotTweet = thread.find(t => 
+                        t.username.toLowerCase() === this.twitterUsername.toLowerCase() && 
+                        t.id === tweet.inReplyToStatusId
+                    );
+                    
+                    if (replyingToBotTweet) {
+                        elizaLogger.log("This is a direct reply to the bot's tweet, prioritizing that context");
+                        
+                        // Extraer palabras clave del tweet del bot al que responden
+                        const botTweetWords = replyingToBotTweet.text.split(/\s+/)
+                            .filter(word => word.length > 3)
+                            .map(word => word.toLowerCase());
+                            
+                        // Buscar en la colección de predicciones
+                        for (const doc of querySnapshot.docs) {
+                            const prediction = doc.data();
+                            // Usar type assertion para acceder a las propiedades
+                            const questionText = (prediction as any).question?.toLowerCase() || "";
+                            
+                            // Verificar correspondencia entre el tweet del bot y esta predicción
+                            const matchScore = botTweetWords.filter(word => 
+                                questionText.includes(word)
+                            ).length;
+                            
+                            if (matchScore > highestScore) {
+                                highestScore = matchScore;
+                                matchedPrediction = prediction;
+                                elizaLogger.log(`Found matching prediction from bot tweet: ${(prediction as any).question} (score: ${matchScore})`);
+                            }
+                        }
+                    }
+                    
+                    // Si aún no tenemos una coincidencia, usar keywords
+                    if (!matchedPrediction && allKeywords.length > 0) {
+                        // Buscar por keywords
+                        for (const doc of querySnapshot.docs) {
+                            const prediction = doc.data();
+                            // Usar type assertion para acceder a las propiedades
+                            const questionText = (prediction as any).question?.toLowerCase() || "";
+                            const predictionText = ((prediction as any).prediction_text || "").toLowerCase();
+                            
+                            // Check if any of our keywords are in the question or prediction text
+                            const matchScore = allKeywords.filter(keyword => 
+                                questionText.includes(keyword.toLowerCase()) || 
+                                predictionText.includes(keyword.toLowerCase())
+                            ).length;
+                            
+                            if (matchScore > highestScore) {
+                                highestScore = matchScore;
+                                matchedPrediction = prediction;
+                                elizaLogger.log(`Found matching prediction by keywords: ${(prediction as any).question} (score: ${matchScore})`);
+                            }
+                        }
+                    }
+                    
+                    // Si todavía no hay coincidencia, usar la predicción más reciente
+                    if (!matchedPrediction && querySnapshot.docs.length > 0) {
+                        matchedPrediction = querySnapshot.docs[0].data();
+                        elizaLogger.log(`No keyword match found, using most recent prediction: ${(matchedPrediction as any).question}`);
+                    }
+                    
+                    if (matchedPrediction) {
+                        // Format the prediction data to include in the response context
+                        predictionData = `
+# RELEVANT PREDICTION DATA:
+Question: ${(matchedPrediction as any).question}
+My Position: ${(matchedPrediction as any).prediction} at $${(matchedPrediction as any).entry_price || "N/A"}
+Confidence: ${(matchedPrediction as any).confidence ? ((matchedPrediction as any).confidence * 100).toFixed(0) + '%' : "Medium"}
+Edge: ${(matchedPrediction as any).analysis_details?.edge || "N/A"}
+Analysis: ${(matchedPrediction as any).analysis_details?.decision_reasoning || (matchedPrediction as any).reasoning || ""}
+News Analysis: ${(matchedPrediction as any).news_analysis || "Based on market analysis and recent news."}
+AI Probability: ${(matchedPrediction as any).analysis_details?.ai_probability || "N/A"}
+
+IMPORTANT: When asked about this prediction, give concrete reasons from the News Analysis or Analysis fields. Do NOT use mystical language. Be direct and factual about why you made this bet.
+`;
+                        elizaLogger.log("Adding prediction data to response context");
+                    } else {
+                        elizaLogger.log("No matching prediction found in database");
+                        
+                        // Proporcionar un contexto de respaldo para que el bot pueda responder algo razonable
+                        predictionData = `
+# NO SPECIFIC PREDICTION FOUND
+The user is asking about a prediction or bet, but no specific data was found in the database.
+
+IMPORTANT: When responding to this question about why you made a bet:
+1. Be direct and factual, not mystical
+2. Explain that you make predictions based on data analysis, market trends, and AI probability models
+3. Mention that you look for statistical edges where the market is mispriced
+4. Your goal is to find opportunities where your prediction models show a different probability than the market price reflects
+`;
+                    }
+                    
+                } catch (error) {
+                    elizaLogger.error("Error searching for prediction data:", error);
+                }
+            }
+
             // Compose rich state with all context
             const enrichedState = await this.runtime.composeState(
                 {
@@ -1776,6 +2002,7 @@ export class TwitterPostClient {
                                   .join("\n")}`
                             : "",
                     quotedContent,
+                    predictionData  // Add the prediction data to the context
                 }
             );
 
@@ -2146,13 +2373,15 @@ export class TwitterPostClient {
                         if (tweetContent.imagePrompt) {
                             try {
                                 // Usar la función generateImage directamente
-                                elizaLogger.log(`Generating image with prompt: ${tweetContent.imagePrompt}`);
+                                elizaLogger.log(`Generating image with prompt: ${tweetContent.imagePrompt}${tweetContent.imageStyleId ? ` and style: ${tweetContent.imageStyleId}` : ''}`);
                                 
                                 const imageResult = await generateImage({
                                     prompt: tweetContent.imagePrompt,
                                     width: 1024,
                                     height: 1024,
-                                    count: 1
+                                    count: 1,
+                                    // @ts-ignore - styleId está disponible en la función pero no en el tipo
+                                    styleId: tweetContent.imageStyleId // Usar el estilo seleccionado si existe
                                 }, this.runtime);
                                 
                                 if (imageResult.success && imageResult.data && imageResult.data.length > 0) {
@@ -2170,7 +2399,7 @@ export class TwitterPostClient {
                                             data: imageBuffer,
                                             mediaType: contentType
                                         }];
-                                        elizaLogger.log(`Successfully generated image for tweet`);
+                                        elizaLogger.log(`Successfully generated image for tweet${tweetContent.imageStyleId ? ` with style ${IMAGE_STYLES[tweetContent.imageStyleId]?.name || tweetContent.imageStyleId}` : ''}`);
                                     }
                                 } else if (imageResult.error) {
                                     elizaLogger.error(`Error in image generation:`, imageResult.error);
@@ -2205,9 +2434,9 @@ export class TwitterPostClient {
     // Modificar getNextPredictionTemplate para que sea asíncrono
     private async getNextPredictionTemplate(prediction: any): Promise<string> {
         const templateStyles = [
-            // Estilo 1: Enfoque en el razonamiento con información clara
+            // Estilo 1: Directo y personal, primera persona
             `
-You are BabaVarga, a direct market analyst who offers clear market predictions.
+You are BabaVarga, a professional market analyst who shares predictions in a direct, first-person style.
 
 PREDICTION DATA:
 Question: ${prediction.question}
@@ -2215,131 +2444,131 @@ Position: ${prediction.prediction} at $${prediction.entry_price}
 Confidence: ${prediction.confidence}
 Edge: ${prediction.analysis_details?.edge || 0}
 Analysis: ${prediction.analysis_details?.decision_reasoning || ""}
-AI Probability: ${prediction.analysis_details?.ai_probability || 0}
+News Analysis: ${prediction.news_analysis || ""}
 
 TWEET GUIDELINES:
-- Start with a brief, clear summary of the prediction
-- Format the bet clearly: "Taking ${prediction.prediction} at $${prediction.entry_price}"
-- Add a simple reason for this position
-- Use everyday language with minimal mysticism
-- Keep it under 280 characters
-- Format: summary → CLEAR BET STATEMENT → brief explanation
+- Use first person in various ways
+- Be direct and clear about your position
+- Include a simple one-sentence explanation of why
+- Sound confident but not arrogant
+- Keep it conversational and easy to read
+- Maximum 280 characters
+- Format: simple statement → position → brief reason extracted from the news_analysis field
 
 EXAMPLE:
-"Analyzing market sentiment for ${prediction.question.substring(0, 30)}...
+"I just bet ${prediction.prediction} on ${prediction.question.substring(0, 40)}... at $${prediction.entry_price}
 
-Taking ${prediction.prediction} at $${prediction.entry_price}
-
-Our model shows a ${((prediction.analysis_details?.edge || 0) * 100).toFixed(1)}% edge on this position based on current data."
+Why? ${prediction.news_analysis ? `${prediction.news_analysis.split('.')[0]}.` : `Simple analysis shows ${((prediction.analysis_details?.edge || 0) * 100).toFixed(1)}% edge - ${prediction.prediction === "YES" ? "this is definitely happening" : "this isn't going to happen"}.`}"
 `,
 
-            // Estilo 2: Estilo semi-místico pero con información clara
+            // Estilo 2: Estilo de pregunta y respuesta
             `
-You are BabaVarga, a market predictor who combines data analysis with a touch of mysticism.
+You are BabaVarga, a direct market analyst who communicates predictions in a question-answer format.
 
 PREDICTION DATA:
 Question: ${prediction.question}
 Position: ${prediction.prediction} at $${prediction.entry_price}
 Confidence: ${prediction.confidence}
 Edge: ${prediction.analysis_details?.edge || 0}
+News Analysis: ${prediction.news_analysis || ""}
 
 TWEET GUIDELINES:
-- Start with a brief statement about the market prediction
-- Clearly format the position: "${prediction.prediction} on ${prediction.question.substring(0, 30)}... at $${prediction.entry_price}"
-- Use just a touch of mystical language but prioritize clarity
-- Keep it under 280 characters
-- Format: brief intro → CLEAR POSITION STATEMENT → short explanation
+- Start with the question itself or a variation of it
+- Follow immediately with your position: "I don't think so" or "Yes, absolutely"
+- Mention that you bet on Polymarket: "just bet NO/YES on @Polymarket"
+- Add a brief explanation drawing from news_analysis when available
+- Sound confident and matter-of-fact
+- Maximum 280 characters
+- No mystical language or cryptic phrases
 
 EXAMPLE:
-"Market analysis complete on ${prediction.question.substring(0, 40)}...
+"${prediction.question}
 
-Position: ${prediction.prediction} at $${prediction.entry_price}
+I don't think so, just bet ${prediction.prediction} at $${prediction.entry_price} on @Polymarket.
 
-The data shows a ${((prediction.analysis_details?.edge || 0) * 100).toFixed(1)}% edge. Our algorithms have spoken."
+${prediction.news_analysis ? prediction.news_analysis.split('.')[0] + '.' : (prediction.prediction === "YES" ? "The data points to this happening." : "The odds are against this outcome.")}"
 `,
 
-            // Estilo 3: Directo y factual con énfasis en la apuesta
+            // Estilo 3: Análisis directo
             `
-You are BabaVarga, a direct and precise market predictor who states positions clearly.
+You are BabaVarga, a professional market analyst who talks directly about your bets.
 
 PREDICTION DATA:
 Question: ${prediction.question}
 Position: ${prediction.prediction} at $${prediction.entry_price}
 Confidence: ${prediction.confidence}
 Edge: ${prediction.analysis_details?.edge || 0}
+News Analysis: ${prediction.news_analysis || ""}
 
 TWEET GUIDELINES:
-- Be completely direct and factual
-- Format the main prediction prominently: "PREDICTION: ${prediction.prediction} on [question] at $${prediction.entry_price}"
-- Include the confidence level and edge if available
-- Use professional, matter-of-fact language
-- Maximum 180 characters
-- No mystical language or forced engagement questions
+- Lead with "Taking [YES/NO]" or "Just took position: [YES/NO]"
+- Clearly state the question you're betting on
+- Include the entry price: "at $X.XX"
+- Use news_analysis data in your reason when available
+- Use professional language with no mysticism
+- Maximum 280 characters
+- Sound authoritative but approachable
 
 EXAMPLE:
-"PREDICTION: ${prediction.prediction} on ${prediction.question.substring(0, 30)}...
+"Taking ${prediction.prediction} on "${prediction.question.substring(0, 40)}..." at $${prediction.entry_price}.
 
-Price: $${prediction.entry_price}
+My analysis: ${prediction.news_analysis ? prediction.news_analysis.split('.')[0] + '.' : (prediction.prediction === "YES" ? "Current trends strongly support this outcome" : "The data doesn't support this happening")} (${(prediction.confidence * 100).toFixed(0)}% confidence)."
+`,
+
+            // Estilo 4: Formato de noticias
+            `
+You are BabaVarga, a market analyst who presents predictions like breaking news.
+
+PREDICTION DATA:
+Question: ${prediction.question}
+Position: ${prediction.prediction} at $${prediction.entry_price}
+Confidence: ${prediction.confidence}
+Edge: ${prediction.analysis_details?.edge || 0}
+News Analysis: ${prediction.news_analysis || ""}
+
+TWEET GUIDELINES:
+- Start with a brief news-style headline about your bet
+- Clearly state your position and the entry price
+- Add a data-driven explanation using news_analysis when available
+- Use clear, professional language
+- Maximum 280 characters
+- No questions or mystical language
+
+EXAMPLE:
+"NEW BET: ${prediction.prediction} on ${prediction.question.substring(0, 40)}...
+
+Entry: $${prediction.entry_price}
 Confidence: ${(prediction.confidence * 100).toFixed(0)}%
-Edge: ${((prediction.analysis_details?.edge || 0) * 100).toFixed(1)}%
+${prediction.news_analysis ? `Analysis: ${prediction.news_analysis.split('.')[0]}.` : `Edge: ${((prediction.analysis_details?.edge || 0) * 100).toFixed(1)}%`}
 
-Based on current market indicators."
+This ${prediction.prediction === "YES" ? "is likely to happen" : "is unlikely to happen"} based on available data."
 `,
 
-            // Estilo 4: Informativo con datos claros (sin preguntas retóricas)
+            // Estilo 5: Simple y directo
             `
-You are BabaVarga, an informative market analyst focusing on clear data presentation.
+You are BabaVarga, a straight-talking market analyst who keeps predictions simple.
 
 PREDICTION DATA:
 Question: ${prediction.question}
 Position: ${prediction.prediction} at $${prediction.entry_price}
 Confidence: ${prediction.confidence}
 Edge: ${prediction.analysis_details?.edge || 0}
+News Analysis: ${prediction.news_analysis || ""}
 
 TWEET GUIDELINES:
-- Start with a clear description of what you're predicting
-- Format the core prediction prominently: "${prediction.prediction} position at $${prediction.entry_price}"
-- Include one key data point that supports your position
-- Use professional language with minimal flair
-- Maximum 280 characters
-- Avoid asking engagement questions
+- Use simple, direct language anyone can understand
+- Clearly state what you're betting on and your position
+- Include a reason based on news_analysis when available
+- No technical jargon, mystical language, or fluff
+- Maximum 240 characters to keep it concise
+- Sound confident but not arrogant
 
 EXAMPLE:
-"Market analysis for ${prediction.question.substring(0, 40)}...
+"Will ${prediction.question.substring(0, 40)}...?
 
-Taking ${prediction.prediction} position at $${prediction.entry_price}
+I just bet ${prediction.prediction} at $${prediction.entry_price}.
 
-Our model calculates a ${((prediction.analysis_details?.edge || 0) * 100).toFixed(1)}% edge against current market sentiment."
-`,
-
-            // Estilo 5: Técnico/algoritmo con formato de datos
-            `
-You are BabaVarga, a technical market analyst focused on data and probability.
-
-PREDICTION DATA:
-Question: ${prediction.question}
-Position: ${prediction.prediction} at $${prediction.entry_price}
-Confidence: ${prediction.confidence}
-Edge: ${prediction.analysis_details?.edge || 0}
-AI Probability: ${prediction.analysis_details?.ai_probability || 0}
-
-TWEET GUIDELINES:
-- Use "MARKET ALERT:" or similar header
-- Format prediction clearly as "POSITION: ${prediction.prediction} at $${prediction.entry_price}"
-- Include relevant market data points in a structured format
-- Use precise, technical language
-- Maximum 280 characters
-- No mystical language or rhetorical questions
-
-EXAMPLE:
-"MARKET ALERT: ${prediction.question.substring(0, 30)}...
-
-POSITION: ${prediction.prediction} at $${prediction.entry_price}
-
-DATA:
-• Confidence: ${(prediction.confidence * 100).toFixed(0)}%
-• Edge: ${((prediction.analysis_details?.edge || 0) * 100).toFixed(1)}%
-• Market inefficiency detected"
+Why? ${prediction.news_analysis ? prediction.news_analysis.split('.')[0] + '.' : (prediction.prediction === "YES" ? "The evidence suggests this will happen." : "Analysis shows this is unlikely to happen.")}"
 `
         ];
         
@@ -2355,7 +2584,7 @@ DATA:
         return templateStyles[styleIndex];
     }
     
-    private async generatePredictionTweet(prediction: any): Promise<{tweetText: string, imagePrompt: string}> {
+    private async generatePredictionTweet(prediction: any): Promise<{tweetText: string, imagePrompt: string, imageStyleId?: string}> {
         try {
             const state = await this.runtime.composeState(
                 {
@@ -2384,7 +2613,17 @@ DATA:
             let category = "general";
             const question = prediction.question.toLowerCase();
             
-            if (question.includes("vs") || 
+            if (question.includes("war") || 
+                question.includes("russia") || 
+                question.includes("ukrain") || 
+                question.includes("attack") ||
+                question.includes("invasion") ||
+                question.includes("capture") ||
+                question.includes("military") ||
+                question.includes("troops") ||
+                question.includes("conflict")) {
+                category = "conflict";
+            } else if (question.includes("vs") || 
                 question.includes("game") || 
                 question.includes("match") || 
                 question.includes("team") ||
@@ -2412,11 +2651,32 @@ DATA:
                       question.includes("software")) {
                 category = "technology";
             }
+            
+            // Seleccionar un estilo al azar para la imagen
+            const styleKeys = Object.keys(IMAGE_STYLES);
+            const randomStyleId = styleKeys[Math.floor(Math.random() * styleKeys.length)];
+            const selectedStyle = IMAGE_STYLES[randomStyleId];
+            
+            // Añadir info sobre el estilo seleccionado en el log
+            elizaLogger.log(`Selected random style for image: ${selectedStyle.name}`);
 
             // Añadir solicitud de prompt de imagen según la categoría
             let imagePromptRequest = "";
             
             switch(category) {
+                case "conflict":
+                    imagePromptRequest = `
+
+# ADDITIONAL TASK: Create a brief image prompt (20-30 words) for an image to accompany this tweet.
+This prediction is about WAR/CONFLICT, so create a REALISTIC geopolitical image prompt that shows:
+- A map of the region with territorial markings
+- Realistic geopolitical visualization, NOT actual combat
+- Professional data visualization showing military/strategic positions
+- NO human suffering, NO weapons, focus on maps/strategy elements
+
+Example: "Map of ${question.includes('Russia') ? 'Russia-Ukraine conflict' : 'conflict zone'}, territorial visualization showing ${prediction.prediction === 'YES' ? 'advance' : 'defensive positions'}, geopolitical analysis style, professional infographic"`;
+                    break;
+                    
                 case "sports":
                     imagePromptRequest = `
 
@@ -2534,22 +2794,42 @@ Example: "Conceptual image representing prediction about ${question}, abstract s
             let imagePrompt = "";
             
             // Intentar separar por "ADDITIONAL TASK:" o similar
-            const parts = fullResponse.split(/ADDITIONAL TASK:|\nADDITIONAL TASK:/i);
-            if (parts.length >= 2) {
-                tweetText = parts[0].trim();
+            const separators = [
+                "ADDITIONAL TASK:", 
+                "\nADDITIONAL TASK:", 
+                "Image prompt:", 
+                "\nImage prompt:", 
+                "IMAGE PROMPT:", 
+                "\nIMAGE PROMPT:"
+            ];
+            
+            let splitIndex = -1;
+            
+            // Buscar cualquiera de los separadores
+            for (const separator of separators) {
+                const index = fullResponse.indexOf(separator);
+                if (index > 0 && (splitIndex === -1 || index < splitIndex)) {
+                    splitIndex = index;
+                }
+            }
+            
+            if (splitIndex > 0) {
+                // Usar el índice encontrado para separar
+                tweetText = fullResponse.substring(0, splitIndex).trim();
+                const promptPart = fullResponse.substring(splitIndex).trim();
                 
                 // Buscar el prompt específico usando comillas
-                const promptMatch = parts[1].match(/"([^"]+)"/);
+                const promptMatch = promptPart.match(/"([^"]+)"/);
                 if (promptMatch && promptMatch[1]) {
                     imagePrompt = promptMatch[1];
                 } else {
                     // Si no hay comillas, buscar después de "Example:" y tomar el resto del texto
-                    const exampleSplit = parts[1].split(/Example:/i);
+                    const exampleSplit = promptPart.split(/Example:/i);
                     if (exampleSplit.length >= 2) {
                         imagePrompt = exampleSplit[1].trim();
                     } else {
                         // Si no hay "Example:", tomar las últimas líneas que no sean instrucciones
-                        const lines = parts[1].split('\n').filter(line => 
+                        const lines = promptPart.split('\n').filter(line => 
                             !line.startsWith('-') && 
                             !line.startsWith('#') && 
                             line.trim().length > 10
@@ -2559,16 +2839,81 @@ Example: "Conceptual image representing prediction about ${question}, abstract s
                             imagePrompt = lines[lines.length - 1].trim();
                         } else {
                             // Último recurso: tomar toda la segunda parte y eliminar instrucciones obvias
-                            imagePrompt = parts[1].replace(/The image should be|Create a|prompt that shows|Example:/gi, '').trim();
+                            imagePrompt = promptPart.replace(/The image should be|Create a|prompt that shows|Example:|ADDITIONAL TASK:|Image prompt:|IMAGE PROMPT:/gi, '').trim();
                         }
                     }
                 }
             } else {
-                // Si no se pudo separar, usar todo como tweet
-                tweetText = fullResponse;
-                
-                // Generar un prompt según la categoría
+                // Si no se encontraron separadores conocidos, intentar dividir en párrafos
+                const paragraphs = fullResponse.split('\n\n');
+                if (paragraphs.length > 1) {
+                    // Usar el último párrafo para el prompt de imagen si parece razonable
+                    const lastParagraph = paragraphs[paragraphs.length - 1].trim();
+                    if (lastParagraph.toLowerCase().includes('image') || 
+                        lastParagraph.includes('visual') || 
+                        lastParagraph.length < 100) {
+                        tweetText = paragraphs.slice(0, -1).join('\n\n').trim();
+                        imagePrompt = lastParagraph.replace(/Image prompt:|IMAGE PROMPT:/gi, '').trim();
+                    } else {
+                        // Si el último párrafo no parece un prompt, usar todo como tweet
+                        tweetText = fullResponse;
+                        
+                        // Generar un prompt según la categoría
+                        switch(category) {
+                            case "conflict":
+                                imagePrompt = `Map of ${question.includes('Russia') ? 'Russia-Ukraine conflict' : 'conflict zone'}, territorial visualization showing ${prediction.prediction === 'YES' ? 'advance' : 'defensive positions'}, geopolitical analysis style, professional infographic`;
+                                break;
+                            case "sports":
+                                imagePrompt = `Sports arena view of ${question.includes(' vs ') ? question.split(' vs ')[0] : 'team'} vs ${question.includes(' vs ') ? question.split(' vs ')[1].split(' ')[0] : 'opponent'}, dynamic action shot, realistic sports photography`;
+                                break;
+                            case "politics":
+                                imagePrompt = `Political data visualization showing ${prediction.prediction} outcome for ${question}, election map style, national flags, realistic political context`;
+                                break;
+                            case "finance":
+                                imagePrompt = `Financial chart showing ${prediction.prediction === "YES" ? "bullish" : "bearish"} trend for ${question}, price point at $${prediction.entry_price}, professional trading terminal`;
+                                break;
+                            case "technology":
+                                imagePrompt = `Modern technology interface showing data about ${question}, digital metrics dashboard, clean tech aesthetic, ${prediction.prediction} outcome indicated`;
+                                break;
+                            default:
+                                imagePrompt = `Data visualization of prediction for ${question}, professional chart showing ${prediction.prediction} outcome at $${prediction.entry_price}`;
+                                break;
+                        }
+                    }
+                } else {
+                    // Si no hay párrafos múltiples, usar todo como tweet
+                    tweetText = fullResponse;
+                    
+                    // Generar un prompt según la categoría
+                    switch(category) {
+                        case "conflict":
+                            imagePrompt = `Map of ${question.includes('Russia') ? 'Russia-Ukraine conflict' : 'conflict zone'}, territorial visualization showing ${prediction.prediction === 'YES' ? 'advance' : 'defensive positions'}, geopolitical analysis style, professional infographic`;
+                            break;
+                        case "sports":
+                            imagePrompt = `Sports arena view of ${question.includes(' vs ') ? question.split(' vs ')[0] : 'team'} vs ${question.includes(' vs ') ? question.split(' vs ')[1].split(' ')[0] : 'opponent'}, dynamic action shot, realistic sports photography`;
+                            break;
+                        case "politics":
+                            imagePrompt = `Political data visualization showing ${prediction.prediction} outcome for ${question}, election map style, national flags, realistic political context`;
+                            break;
+                        case "finance":
+                            imagePrompt = `Financial chart showing ${prediction.prediction === "YES" ? "bullish" : "bearish"} trend for ${question}, price point at $${prediction.entry_price}, professional trading terminal`;
+                            break;
+                        case "technology":
+                            imagePrompt = `Modern technology interface showing data about ${question}, digital metrics dashboard, clean tech aesthetic, ${prediction.prediction} outcome indicated`;
+                            break;
+                        default:
+                            imagePrompt = `Data visualization of prediction for ${question}, professional chart showing ${prediction.prediction} outcome at $${prediction.entry_price}`;
+                            break;
+                    }
+                }
+            }
+            
+            // Asegurar que el prompt no sea demasiado corto
+            if (imagePrompt.length < 15) {
                 switch(category) {
+                    case "conflict":
+                        imagePrompt = `Map of ${question.includes('Russia') ? 'Russia-Ukraine conflict' : 'conflict zone'}, territorial visualization showing ${prediction.prediction === 'YES' ? 'advance' : 'defensive positions'}, geopolitical analysis style, professional infographic`;
+                        break;
                     case "sports":
                         imagePrompt = `Sports arena view of ${question.includes(' vs ') ? question.split(' vs ')[0] : 'team'} vs ${question.includes(' vs ') ? question.split(' vs ')[1].split(' ')[0] : 'opponent'}, dynamic action shot, realistic sports photography`;
                         break;
@@ -2587,24 +2932,12 @@ Example: "Conceptual image representing prediction about ${question}, abstract s
                 }
             }
             
-            // Asegurar que el prompt no sea demasiado corto
-            if (imagePrompt.length < 15) {
-                switch(category) {
-                    case "sports":
-                        imagePrompt = `Sports arena view of ${question.includes(' vs ') ? question.split(' vs ')[0] : 'team'} vs ${question.includes(' vs ') ? question.split(' vs ')[1].split(' ')[0] : 'opponent'}, dynamic action shot, realistic sports photography`;
-                        break;
-                    case "politics":
-                        imagePrompt = `Political data visualization showing ${prediction.prediction} outcome for ${question}, election map style, national flags, realistic political context`;
-                        break;
-                    case "finance":
-                        imagePrompt = `Financial chart showing ${prediction.prediction === "YES" ? "bullish" : "bearish"} trend for ${question}, price point at $${prediction.entry_price}, professional trading terminal`;
-                        break;
-                    case "technology":
-                        imagePrompt = `Modern technology interface showing data about ${question}, digital metrics dashboard, clean tech aesthetic, ${prediction.prediction} outcome indicated`;
-                        break;
-                    default:
-                        imagePrompt = `Data visualization of prediction for ${question}, professional chart showing ${prediction.prediction} outcome at $${prediction.entry_price}`;
-                        break;
+            // Verificación adicional para asegurarse de que tweetText no contenga texto de prompt
+            const promptIndicators = ["image prompt:", "prompt:", "image:"];
+            for (const indicator of promptIndicators) {
+                const index = tweetText.toLowerCase().indexOf(indicator);
+                if (index > 0) {
+                    tweetText = tweetText.substring(0, index).trim();
                 }
             }
             
@@ -2613,7 +2946,8 @@ Example: "Conceptual image representing prediction about ${question}, abstract s
             
             return {
                 tweetText: tweetText,
-                imagePrompt: imagePrompt
+                imagePrompt: imagePrompt,
+                imageStyleId: randomStyleId
             };
         } catch (error) {
             elizaLogger.error("Error generating prediction tweet:", error);

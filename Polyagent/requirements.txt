@@ -5,7 +5,7 @@ tensorflow-probability[tf]
 tf-keras
 keras
 firebase
-firebase-admin
+firebase-admin==6.6.0
 python-dotenv==1.0.1
 aiohappyeyeballs==2.3.4
 aiohttp==3.10.0
@@ -16,7 +16,7 @@ asgiref==3.8.1
 asttokens==2.4.1
 async-timeout==4.0.3
 attrs==23.2.0
-backoff==2.2.1
+backoff>=2.2.1
 bcrypt==4.2.0
 bitarray==2.9.2
 build==1.2.1
@@ -133,13 +133,13 @@ pyproject_hooks==1.1.0
 pysha3==1.0.2
 pytest==8.3.2
 python-dateutil==2.9.0.post0
-python-dotenv==1.0.1
+python-firebase==4.0.1
 python-multipart==0.0.9
 pyunormalize==15.1.0
 PyYAML==6.0.1
 referencing==0.35.1
 regex==2024.7.24
-requests>=2.31.0
+requests==2.32.3
 requests-oauthlib==2.0.0
 rich==13.7.1
 rlp==4.0.1
@@ -169,7 +169,7 @@ uvicorn==0.30.3
 uvloop==0.19.0; sys_platform != "win32"
 virtualenv==20.26.3
 watchfiles==0.22.0
-web3>=5.31.4
+web3==6.11.0
 websocket-client==1.8.0
 websockets==12.0
 wrapt==1.16.0

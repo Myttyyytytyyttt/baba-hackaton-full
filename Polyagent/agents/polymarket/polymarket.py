@@ -488,24 +488,35 @@ class Polymarket:
             print(f"Error getting token balance: {e}")
             return 0.0
 
-    def execute_market_order(self, market, amount):
+    def execute_market_order(self, market, amount, explicit_position=None):
         try:
             # Obtener datos del mercado usando los atributos correctos
             token_ids = ast.literal_eval(market.clob_token_ids)  # Usar el atributo directamente
             
             # Determinar qué token comprar basado en la posición recomendada
-            # El token[0] es NO, token[1] es YES
-            if hasattr(market, 'trade') and market.trade.get('position') == "NO":
-                token_id = token_ids[0]  # Token NO
-                position = "NO"
-                print(f"DEBUG: Selecting NO position (token_id={token_id})")
-            else:
-                token_id = token_ids[1]  # Token YES
-                position = "YES"
-                print(f"DEBUG: Selecting YES position (token_id={token_id})")
+            # CORREGIDO: El token[0] es YES, token[1] es NO (invertido del comportamiento anterior)
             
-            print(f"DEBUG: Market trade data: {market.trade if hasattr(market, 'trade') else 'No trade data'}")
-            print(f"DEBUG: Token IDs available: {token_ids}")
+            # Primero verificar el parámetro explícito
+            if explicit_position is not None and explicit_position.upper() in ["YES", "NO"]:
+                position = explicit_position.upper()
+                print(f"Using explicit position: {position}")
+            # Si el trade dice SELL -> compramos NO
+            # Si el trade dice BUY -> compramos YES
+            elif hasattr(market, 'trade') and market.trade.get('side') == "SELL":
+                token_id = token_ids[1]  # Token NO (corregido)
+                position = "NO"
+            elif hasattr(market, 'trade') and market.trade.get('position'):
+                # Usar directamente la posición del trade
+                position = market.trade.get('position').upper()
+            else:
+                token_id = token_ids[0]  # Token YES (default) (corregido)
+                position = "YES"
+            
+            # Seleccionar token ID basado en la posición
+            if position == "NO":
+                token_id = token_ids[1]  # Corregido: Token NO es el segundo (index 1)
+            else:
+                token_id = token_ids[0]  # Corregido: Token YES es el primero (index 0)
             
             # Verificar si ya tenemos una posición
             current_balance = self.get_token_balance(token_id)
@@ -538,7 +549,7 @@ class Polymarket:
                 try:
                     if hasattr(market, 'outcome_prices') and market.outcome_prices:
                         prices = ast.literal_eval(market.outcome_prices)
-                        market_price = float(prices[0] if position == "NO" else prices[1])
+                        market_price = float(prices[0] if position == "YES" else prices[1])  # Corregido
                     else:
                         market_price = 0.5  # Precio predeterminado si no hay datos
                 except:
@@ -569,14 +580,14 @@ class Polymarket:
                 orderbook = self.client.get_order_book(token_id)
                 
                 # Calcular el tamaño mínimo requerido en tokens
-                min_size = 5.0  # Tamaño mínimo en tokens
+                min_size = max(12.0, 1.2 / market_price) if market_price > 0 else 15.0
                 min_cost = min_size * market_price  # Costo mínimo en USDC
                 
                 print(f"Creating order for {position} position:")
                 print(f"Token ID: {token_id}")
                 print(f"Market price: ${market_price}")
-                print(f"Minimum size: {min_size} tokens")
-                print(f"Minimum cost: ${min_cost:.4f} USDC")
+                print(f"Size: {min_size} tokens")
+                print(f"Total cost: ${min_cost:.4f} USDC")
                 
                 # Crear orden usando OrderArgs
                 order_args = OrderArgs(
@@ -593,6 +604,10 @@ class Polymarket:
                 # Postear la orden
                 resp = self.client.post_order(signed_order)
                 print("Order response:", resp)
+                
+                # Añadir la posición al resultado para confirmar lo que se compró
+                if isinstance(resp, dict):
+                    resp["position"] = position
                 
                 return resp
                 
